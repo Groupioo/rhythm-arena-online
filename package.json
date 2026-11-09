@@ -1,0 +1,94 @@
+{
+  "name": "rhythm-arena-online",
+  "version": "1.0.0",
+  "description": "Rhythm Arena Online: juego de ritmo web con salas y matchmaking (servidor Node.js + cliente Electron).",
+  "author": "Tu Nombre <tu@correo.com>",
+  "main": "electron/main.js",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "check": "node --check server.js && node --check electron/main.js && node --check src/validation.js && node --check src/rooms.js && node --check src/matchmaking.js",
+    "electron": "electron .",
+    "pack": "electron-builder --win --dir",
+    "dist": "electron-builder --win"
+  },
+  "keywords": [
+    "rhythm-game",
+    "multiplayer",
+    "socket.io",
+    "express",
+    "matchmaking",
+    "electron"
+  ],
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.rhythmarena.online",
+    "productName": "Rhythm Arena Online",
+    "copyright": "Copyright © 2026",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "server.js",
+      "songs.js",
+      "src/**/*",
+      "public/**/*",
+      "package.json",
+      "!**/*.map",
+      "!**/.env"
+    ],
+    "extraResources": [
+      {
+        "from": "demo",
+        "to": "demo"
+      }
+    ],
+    "asarUnpack": [
+      "public/background/**/*"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    }
+  }
+}

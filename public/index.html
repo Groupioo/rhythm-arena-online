@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Rhythm Arena Online</title>
+  <meta name="theme-color" content="#070814">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css?v=5">
+</head>
+<body class="bgvideo">
+  <!-- Vídeo de fondo: solo visible en el menú y en el lobby (selección de canciones), nunca en la partida -->
+  <div id="bg-video" aria-hidden="true">
+    <video muted loop playsinline preload="auto" disablepictureinpicture>
+      <source src="/background/63885-508273140.mp4" type="video/mp4">
+    </video>
+  </div>
+  <!-- Música de la pantalla de inicio (solo suena en el login) -->
+  <audio id="bg-music" src="/background/demo.mp3" loop preload="auto"></audio>
+  <!-- Reloj de selección (clasificatoria): arriba a la izquierda, solo en el lobby -->
+  <div id="pick-clock" class="pick-clock" role="timer" aria-live="off" hidden>
+    <span class="pick-clock-label">Tiempo para elegir</span>
+    <strong id="pick-clock-val">3:00</strong>
+  </div>
+  <main id="app">
+    <section id="screen-login" class="screen active">
+      <h1>Rhythm <span>Arena</span></h1>
+      <p class="muted">Compite en tiempo real. Teclas: <span id="keys-hint">D F J K</span> (o toca las columnas).</p>
+      <p class="online-line"><span class="online-dot" aria-hidden="true"></span><span id="login-online">Conectando…</span></p>
+      <form id="login-form" class="card">
+        <label for="nick">Tu apodo</label>
+        <input id="nick" maxlength="16" autocomplete="nickname" required placeholder="Ej: NeonFox">
+        <button class="primary" type="submit">Entrar</button>
+      </form>
+    </section>
+
+    <section id="screen-menu" class="screen">
+      <header class="menu-top">
+        <div class="brand">Rhythm <span>Arena</span></div>
+        <button id="btn-keys" class="icon-btn" type="button" title="Configurar teclas" aria-label="Configurar teclas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></button>
+        <button id="btn-skins" class="icon-btn" type="button" title="Tipo de flecha" aria-label="Tipo de flecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 12h5v8h6v-8h5z"/></svg></button>
+        <button id="btn-fs-menu" class="icon-btn" type="button" title="Pantalla completa" aria-label="Pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
+        <button id="online-badge" class="online-badge" type="button" title="Ver jugadores conectados y chat"><span class="online-dot" aria-hidden="true"></span><span id="online-badge-text">0 en línea</span></button>
+        <div id="me" class="profile">
+          <div id="me-avatar" class="avatar" aria-hidden="true"></div>
+          <div class="profile-text"><strong id="me-name"></strong><span id="me-meta" class="muted"></span></div>
+          <span id="me-rating" class="rating-chip" title="Tu rating"></span>
+        </div>
+      </header>
+
+      <div class="menu-grid">
+        <article class="card mode main-mode">
+          <div class="card-head">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg></div>
+            <div><h3>Un jugador</h3><p class="muted">Practica a tu ritmo, sin conexión.</p></div>
+          </div>
+          <div class="fields">
+            <div class="field span2" id="song-picker-wrap" hidden><label>Canción</label><div id="song-picker" class="song-picker"></div></div>
+            <div class="field span2" id="mode-picker-wrap" hidden><label>Modo de juego</label><div id="mode-picker" class="mode-picker" role="radiogroup" aria-label="Modo de juego"></div></div>
+            <div class="field span2"><label for="solo-song">Canción</label><select id="solo-song"></select></div>
+            <div class="field span2"><label for="solo-mode">Modo de juego</label>
+              <select id="solo-mode">
+                <option value="normal" selected>Normal</option>
+                <option value="survival">Supervivencia</option>
+                <option value="super">Super Perfect</option>
+              </select>
+              <small id="solo-mode-desc" class="muted"></small>
+            </div>
+            <div class="field"><label for="solo-speed">Velocidad</label><select id="solo-speed" class="speed-select"></select></div>
+            <div class="field"><label for="solo-diff">Dificultad</label>
+              <select id="solo-diff">
+                <option value="easy">Fácil</option><option value="normal" selected>Normal</option>
+                <option value="hard">Difícil</option><option value="expert">Experto</option>
+              </select>
+            </div>
+          </div>
+          <button id="btn-solo" class="primary big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg><span>Jugar solo</span></button>
+        </article>
+
+        <div class="side">
+          <article class="card mode ranked">
+            <div class="card-head">
+              <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></div>
+              <div><h3>Clasificatoria</h3><p class="muted">Sube de rating contra rivales de tu nivel.</p></div>
+            </div>
+            <div class="fields one">
+              <div class="field"><label for="quick-speed">Velocidad</label><select id="quick-speed" class="speed-select"></select></div>
+            </div>
+            <button id="btn-quick" class="primary big">Buscar partida</button>
+            <p id="queue-status" class="muted"></p>
+          </article>
+
+          <article class="card mode">
+            <div class="card-head">
+              <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M21 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg></div>
+              <div><h3>Sala privada</h3><p class="muted">Juega con amigos usando un código.</p></div>
+            </div>
+            <button id="btn-create">Crear sala</button>
+            <div class="join-row">
+              <input id="join-code" maxlength="8" placeholder="Código de sala" autocapitalize="characters" aria-label="Código de sala">
+              <button id="btn-join">Unirse</button>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <article class="card mode rooms">
+        <div class="rooms-tabs" role="tablist" aria-label="Salas y jugadores">
+          <button id="tab-rooms" class="rtab on" type="button" role="tab" aria-selected="true" aria-controls="pane-rooms">Salas públicas</button>
+          <button id="tab-online" class="rtab" type="button" role="tab" aria-selected="false" aria-controls="pane-online">Conectados <span id="online-count" class="chip">0</span><i class="tab-dot" aria-hidden="true"></i></button>
+        </div>
+
+        <div id="pane-rooms" class="rpane" role="tabpanel" aria-labelledby="tab-rooms">
+          <div class="card-head">
+            <p class="muted">Únete a una partida abierta.</p>
+            <button id="btn-refresh" class="ghost" type="button">Actualizar</button>
+          </div>
+          <ul id="room-list" class="list"></ul>
+        </div>
+
+        <div id="pane-online" class="rpane" role="tabpanel" aria-labelledby="tab-online" hidden>
+          <p id="online-summary" class="online-summary" aria-live="polite"><span class="online-dot" aria-hidden="true"></span><strong id="online-summary-num">0</strong><span id="online-summary-txt">jugadores conectados</span></p>
+          <div id="gchat-log" class="gchat-log" role="log" aria-live="polite" aria-label="Chat de jugadores"></div>
+          <form id="gchat-form" class="gchat-form" autocomplete="off">
+            <input id="gchat-input" maxlength="200" placeholder="Escribe un mensaje…" aria-label="Mensaje">
+            <button class="primary" type="submit">Enviar</button>
+          </form>
+        </div>
+      </article>
+    </section>
+
+    <section id="screen-lobby" class="screen">
+      <h2>Sala <span id="lobby-code" class="code"></span></h2>
+      <p id="lobby-info" class="muted"></p>
+      <p id="pick-info" class="muted" hidden></p>
+      <ul id="players" class="list card"></ul>
+      <div id="plan-card" class="card" hidden>
+        <h3>Orden de canciones</h3>
+        <ol id="plan-list" class="plan-list"></ol>
+        <p id="plan-note" class="muted"></p>
+      </div>
+      <div id="host-controls" class="card" hidden>
+        <p id="host-controls-hint" class="muted" hidden></p>
+        <div id="slot-wrap" class="slot-wrap">
+          <label id="slot-label">Tus canciones</label>
+          <div id="slot-bar" class="slot-bar" role="tablist" aria-labelledby="slot-label"></div>
+          <button id="btn-slot-remove" class="ghost" type="button" hidden>Quitar esta canción</button>
+        </div>
+        <div id="lobby-picker-wrap" class="lobby-picker" hidden><div id="lobby-song-picker" class="song-picker"></div></div>
+        <label for="song">Canción</label><select id="song"></select>
+        <label for="difficulty">Dificultad</label>
+        <select id="difficulty">
+          <option value="easy">Fácil</option><option value="normal">Normal</option>
+          <option value="hard">Difícil</option><option value="expert">Experto</option>
+        </select>
+        <button id="btn-start" class="primary">Empezar</button>
+      </div>
+      <div class="card"><label for="lobby-speed">Tu velocidad general (todas las canciones)</label><select id="lobby-speed" class="speed-select"></select>
+        <label for="lobby-mode">Tu modo de juego</label>
+        <select id="lobby-mode">
+          <option value="normal" selected>Normal</option>
+          <option value="survival">Supervivencia</option>
+          <option value="super">Super Perfect</option>
+        </select>
+        <small id="lobby-mode-desc" class="muted"></small>
+      </div>
+      <div class="row">
+        <button id="btn-ready" class="primary">Estoy listo</button>
+        <button id="btn-leave">Salir</button>
+      </div>
+    </section>
+
+    <section id="screen-game" class="screen">
+      <div class="game-wrap">
+        <canvas id="stage" width="480" height="640"></canvas>
+        <button id="btn-game-menu" class="game-menu-btn" type="button" aria-label="Menú de la partida" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+        <aside><h3>Marcador</h3><ol id="scoreboard" class="list"></ol><label class="vol" for="vol">Volumen música</label><input id="vol" type="range" min="0" max="100" step="5"><button id="btn-fs" type="button">Pantalla completa</button><button id="btn-quit">Salir</button></aside>
+        <div id="wait" class="overlay" hidden>Terminaste. Esperando al resto…</div>
+      </div>
+    </section>
+
+    <section id="screen-results" class="screen">
+      <div class="res">
+        <header class="res-head">
+          <div id="res-cover" class="res-cover" aria-hidden="true"></div>
+          <div class="res-title">
+            <p id="res-mode" class="res-mode"></p>
+            <h2 id="res-song"></h2>
+            <div id="res-meta" class="res-meta"></div>
+          </div>
+        </header>
+
+        <div class="res-hero card">
+          <div id="res-grade" class="grade" data-g="S" role="img" aria-label="Nota"><span id="res-grade-letter">S</span></div>
+          <div class="res-score">
+            <span class="label">Puntuación</span>
+            <strong id="res-score-val">0</strong>
+            <div id="res-badges" class="res-badges"></div>
+          </div>
+          <div class="ring" role="img" aria-label="Precisión">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <defs><linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4fd8"/><stop offset="1" stop-color="#4fd8ff"/></linearGradient></defs>
+              <circle class="track" cx="60" cy="60" r="52" fill="none" stroke-width="9"/>
+              <circle id="res-ring-bar" class="bar" cx="60" cy="60" r="52" fill="none" stroke-width="9" stroke-linecap="round" stroke="url(#ringGrad)"/>
+            </svg>
+            <div class="ring-text"><strong id="res-acc">0%</strong><span>precisión</span></div>
+          </div>
+        </div>
+
+        <div id="res-stats" class="res-stats"></div>
+
+        <div id="res-judge" class="card res-judge">
+          <h3>Cómo golpeaste</h3>
+          <div id="judge-bar" class="judge-bar" role="img" aria-label="Reparto de golpes"></div>
+          <ul id="judge-legend" class="judge-legend"></ul>
+        </div>
+
+        <div id="res-board" class="card res-board" hidden>
+          <h3>Clasificación</h3>
+          <div class="scroll"><table id="results-table"></table></div>
+        </div>
+
+        <div class="row res-actions">
+          <button id="btn-rematch" class="primary" hidden>Revancha</button>
+          <button id="btn-menu">Volver al menú</button>
+        </div>
+      </div>
+    </section>
+  </main>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/net.js"></script>
+  <script src="/js/songs.js"></script>
+  <script src="/js/keys.js?v=5"></script>
+  <script src="/js/skins.js?v=5"></script>
+  <script src="/js/game.js?v=5"></script>
+  <script src="/js/main.js"></script>
+  <script src="/js/songpicker.js"></script>
+  <script src="/js/mobile.js"></script>
+</body>
+</html>

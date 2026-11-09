@@ -1,0 +1,115 @@
+RHYTHM ARENA ONLINE - COMO VOLVER A JUGAR CON OTROS JUGADORES
+=============================================================
+
+Carpeta del juego:  E:\rhythm-arena-online
+(el juego es un servidor: si cierras la ventana negra de comandos, el juego se apaga)
+
+
+PARTE 1 - ENCENDER EL JUEGO (siempre)
+-------------------------------------
+1. Abre la carpeta  E:\rhythm-arena-online
+2. Haz clic en la barra de direcciones de la carpeta, escribe  cmd  y presiona Enter.
+   (se abre una ventana negra ya ubicada en la carpeta del juego)
+3. Escribe el comando que usas para iniciar el servidor y presiona Enter.
+   Normalmente es uno de estos dos:
+        npm start
+        npm run dev
+   (si no recuerdas cual, abre el archivo package.json de la carpeta y mira la
+    seccion "scripts": ahi aparece el nombre exacto)
+4. Espera a que aparezca un mensaje parecido a "Servidor escuchando en el puerto 3000".
+5. NO CIERRES esa ventana negra mientras estes jugando. Si la cierras, el juego se apaga.
+6. Abre el navegador (Chrome) y entra a:   http://localhost:3000
+
+Solo la primera vez, o si instalaste algo nuevo, ejecuta antes:   npm install
+
+
+PARTE 2 - JUGAR TU SOLO (en tu computadora)
+-------------------------------------------
+- Con los pasos de la parte 1 ya puedes jugar en "Un jugador" y tambien en
+  Clasificatoria / Salas desde tu propia computadora.
+- Si cambiaste algun archivo (game.js, sonidos, etc.), recarga con  Ctrl + F5
+  para que el navegador no use la version vieja guardada.
+
+
+PARTE 3 - JUGAR CON OTRAS PERSONAS
+----------------------------------
+El enlace "localhost:3000" solo funciona en TU computadora. Para que otros entren
+tienes dos opciones:
+
+OPCION A - Amigos en tu misma red Wi-Fi / casa
+  1. Con el juego encendido (parte 1), abre otra ventana de comandos y escribe:  ipconfig
+  2. Busca "Direccion IPv4". Es un numero como  192.168.1.25
+  3. Tus amigos, conectados al mismo Wi-Fi, abren en su navegador:
+         http://192.168.1.25:3000        (usa TU numero)
+  4. Si Windows muestra un aviso del Firewall, presiona "Permitir acceso".
+     Si no te pregunta y no pueden entrar, permite Node.js en el Firewall de Windows
+     (Configuracion > Seguridad de Windows > Firewall > Permitir una aplicacion).
+  5. Cada jugador escribe su apodo y entran a la misma sala (Crear sala / Unirse con codigo).
+
+OPCION B - Amigos por internet (en otras casas)
+  Necesitas exponer tu servidor con un tunel. Con el juego YA encendido:
+  - Con ngrok (ngrok.com, gratis con cuenta):   ngrok http 3000
+  - O con Cloudflare Tunnel:   cloudflared tunnel --url http://localhost:3000
+  El programa te muestra un enlace publico (https://....). Envia ese enlace a tus amigos.
+  OJO: el enlace cambia cada vez que lo vuelves a abrir, asi que debes compartir el nuevo.
+  (Para tener un enlace fijo y que funcione sin tu computadora encendida, habria que
+   subir el juego a un hosting como Render o Railway; esto es aparte.)
+
+Para que otros jugadores se encuentren:
+  - Sala privada: uno hace "Crear sala" y comparte el CODIGO; los demas lo escriben
+    en "Codigo de sala" y presionan "Unirse".
+  - Salas publicas / Clasificatoria: entran con el mismo enlace y aparecen en la lista
+    o en la busqueda de partida.
+  - Todos deben usar el MISMO enlace (el de tu IP o el del tunel).
+
+
+PARTE 4 - ARCHIVOS QUE DEBEN ESTAR (para que suenen las voces)
+--------------------------------------------------------------
+Carpeta:  E:\rhythm-arena-online\public\voices\
+  VOICE_0003.wav   (inicio)
+  VOICE_0008.wav   (combo 100)
+  VOICE_0007.wav   (combo 200)
+  VOICE_0006.wav   (combo 300)
+  VOICE_0005.wav   (combo 400)
+  VOICE_0004.wav   (combo 500)
+  600combos.wav    (combo 600)
+  VOICE_0018.wav   (racha de perfectos)
+  showtime.wav, showtimeboom.wav, showtimeenegy.wav, electricity.wav   (SUPER PERFECT)
+
+Otros archivos importantes:
+  public\js\game.js     (el juego)
+  public\img\arrow.png  (ya no es necesario, la flecha esta dentro de game.js)
+  public\songs\         (tus canciones)
+
+
+PARTE 5 - PARA APAGAR
+---------------------
+Cuando termines, ve a la ventana negra y presiona  Ctrl + C  (luego S si pregunta).
+Para volver a jugar repite desde la PARTE 1.
+
+
+SI ALGO FALLA
+-------------
+- "No se puede acceder a localhost:3000": el servidor no esta encendido (repite parte 1).
+- "Address already in use / puerto en uso": ya hay otro servidor abierto. Cierra la
+  ventana negra anterior y vuelve a empezar.
+- Los demas no pueden entrar: revisa que usen TU IP (o el enlace del tunel), que el
+  juego siga encendido y el Firewall.
+- No suenan las voces: abre el navegador, presiona F12 > Consola y busca mensajes que
+  empiecen con [voces] para saber que archivo falta.
+- Los cambios no se ven: Ctrl + F5.
+
+
+
+
+
+
+CMD
+
+E
+
+cd /d E:\rhythm-arena-online
+
+npm start
+
+:
