@@ -28,8 +28,9 @@ const path = require('path');
 //   2. DEFAULT_REMOTE_URL (URL fija; úsala si tienes VPS/dominio)
 //   3. DISCOVERY_URL: archivo de texto PÚBLICO que contiene la URL actual del túnel (se lee al arrancar)
 //   4. Si nada responde -> servidor local (el modo "Un jugador" sigue funcionando sin conexión)
-const DEFAULT_REMOTE_URL = '';
-const DISCOVERY_URL = 'https://raw.githubusercontent.com/Groupioo/rhythm-arena-online/main/server-url.txt';
+
+const DISCOVERY_URL = '';
+const DEFAULT_REMOTE_URL = 'https://rhythm-arena-online.onrender.com';
 const REMOTE_SERVER_URL = process.env.RA_SERVER_URL || DEFAULT_REMOTE_URL;
 const DEFAULT_PORT = 3000;
 const APP_ROOT = path.join(__dirname, '..');
@@ -242,7 +243,7 @@ function createWindow() {
     }
   });
 
-  mainWindow.loadURL('https://rhythm-arena-online.onrender.com');
+  mainWindow.loadURL(baseUrl);
 }
 
 // ---------------------------------------------------------------------

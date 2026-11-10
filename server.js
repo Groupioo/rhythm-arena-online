@@ -274,9 +274,10 @@ app.use((req, res) => {
 });
 
 // eslint-disable-next-line no-unused-vars
-app.use((err, req, res, next) => {
-  log.error('Error HTTP:', err);
-  res.status(500).json(fail('INTERNAL_ERROR', 'Error interno del servidor.'));
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  next();
 });
 
 const server = http.createServer(app);
