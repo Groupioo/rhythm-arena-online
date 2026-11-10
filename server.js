@@ -65,6 +65,8 @@ const {
 } = require('./src/validation');
 const { RoomManager } = require('./src/rooms');
 const { Matchmaker } = require('./src/matchmaking');
+const { createAccounts } = require('./src/accounts');
+const { createAccountStore } = require('./src/accountStore');
 const { createSongLibrary } = require('./songs');
 
 // ---------------------------------------------------------------------
@@ -195,28 +197,23 @@ const gameLimiter = createRateLimiter({ capacity: config.gameRatePerSec * 2, ref
 const chatLimiter = createRateLimiter({ capacity: 5, refillPerSec: 1 });
 
 /**
- * Perfiles en memoria (clientId -> perfil). El rating NO sobrevive a un reinicio
- * del servidor. Para persistirlo, sustituye este Map por una base de datos.
- * Nota: el clientId actúa como credencial ligera; no lo expongas a otros jugadores.
+ * Cuentas con contraseña (ver src/accounts.js). La cuenta es el perfil: guarda apodo, nacionalidad, rating y partidas.
+ * Con FIREBASE_SERVICE_ACCOUNT (variable de entorno) se guardan en Firestore, colección "accounts" (permanente).
+ * Sin ella se usa ./data/accounts.json, SOLO válido en local (en Render el disco se borra en cada despliegue).
  */
-const profiles = new Map();
-
-function getProfile(clientId, nickname) {
-  let profile = profiles.get(clientId);
-  if (profile) {
-    profiles.delete(clientId); // reinserta al final (LRU sencillo)
-  } else {
-    profile = { clientId, nickname, rating: config.initialRating, games: 0 };
-  }
-  profile.nickname = nickname;
-  profiles.set(clientId, profile);
-  while (profiles.size > config.maxProfiles) {
-    profiles.delete(profiles.keys().next().value);
-  }
-  return profile;
+const accountStore = createAccountStore({
+  firebaseServiceAccount: process.env.FIREBASE_SERVICE_ACCOUNT,
+  file: process.env.ACCOUNTS_FILE || path.join(__dirname, 'data', 'accounts.json'),
+});
+const accounts = createAccounts({ store: accountStore, initialRating: config.initialRating, log });
+if (accountStore.kind === 'file' && IS_PROD) {
+  log.warn('FIREBASE_SERVICE_ACCOUNT no está definida: las cuentas se guardan en un archivo y se perderán al reiniciar/desplegar.');
 }
+const flushAndExit = () => { accounts.flush().finally(() => process.exit(0)); };
+process.on('SIGTERM', flushAndExit);
+process.on('SIGINT', flushAndExit);
 
-const publicProfile = (p) => ({ clientId: p.clientId, nickname: p.nickname, rating: p.rating, games: p.games });
+const publicProfile = (p) => ({ clientId: p.clientId, nickname: p.nickname, country: p.country || null, rating: p.rating, games: p.games });
 
 const ipConnections = new Map();
 
@@ -399,10 +396,11 @@ rooms.on('finished', ({ room, results, reason }) => {
   if (room.ranked) {
     for (const entry of results) {
       const socket = io.sockets.sockets.get(entry.playerId);
-      const profile = socket?.data.session?.profile ?? (entry.clientId ? profiles.get(entry.clientId) : null);
+      const profile = socket?.data.session?.profile ?? (entry.clientId ? accounts.getByClientId(entry.clientId) : null);
       if (!profile) continue;
       profile.rating = entry.ratingAfter;
       profile.games += 1;
+      accounts.save(profile);
       if (socket) socket.emit('profile:update', publicProfile(profile));
     }
   }
@@ -463,7 +461,7 @@ function resolveSongSettings(payload) {
 
 function playerOf(socket) {
   const { profile } = socket.data.session;
-  return { id: socket.id, clientId: profile.clientId, nickname: profile.nickname, rating: profile.rating };
+  return { id: socket.id, clientId: profile.clientId, nickname: profile.nickname, country: profile.country || null, rating: profile.rating };
 }
 
 matchmaker.on('match', ({ players: tickets }) => {
@@ -545,7 +543,7 @@ function on(socket, event, handler, { session = true, limiter = generalLimiter, 
         return reply(fail('RATE_LIMITED', 'Demasiadas solicitudes. Espera un momento.'));
       }
       if (session && !socket.data.session) {
-        return reply(fail('NO_SESSION', 'Primero debes enviar session:hello.'));
+        return reply(fail('NO_SESSION', 'Primero debes iniciar sesión.'));
       }
       return handler(payload, reply);
     } catch (err) {
@@ -568,30 +566,36 @@ function registerHandlers(socket) {
     { session: false }
   );
 
-  // --- Sesión ---
-  on(
-    socket,
-    'session:hello',
-    (payload, reply) => {
-      if (rooms.getRoomByPlayer(socket.id)) {
-        return reply(fail('IN_ROOM', 'No puedes cambiar tu perfil dentro de una sala.'));
-      }
-      const data = isPlainObject(payload) ? payload : {};
-      const nickname = validateNickname(data.nickname);
-      if (!nickname.ok) return reply(nickname);
-      const clientId = validateClientId(data.clientId);
-      if (!clientId.ok) return reply(clientId);
+  // --- Sesión (cuentas con contraseña) ---
+  const authLimiter = createRateLimiter({ capacity: 8, refillPerSec: 0.2 });
+  const authIpLimiter = createRateLimiter({ capacity: 30, refillPerSec: 0.3 });
 
-      matchmaker.dequeue(socket.id);
-      const profile = getProfile(clientId.value || crypto.randomUUID(), nickname.value);
-      socket.data.session = { profile };
-      presence.join(socket);
-      socket.join('online');
-      socket.emit('globalchat:history', globalChat);
-      return reply(done(publicProfile(profile)));
-    },
-    { session: false }
-  );
+  function startSession(account, token, reply) {
+    matchmaker.dequeue(socket.id);
+    socket.data.session = { profile: account, token };
+    presence.join(socket);
+    socket.join('online');
+    socket.emit('globalchat:history', globalChat);
+    return reply(done({ ...publicProfile(account), token }));
+  }
+  const authHandler = (fn) => (payload, reply) => {
+    if (rooms.getRoomByPlayer(socket.id)) return reply(fail('IN_ROOM', 'No puedes cambiar de cuenta dentro de una sala.'));
+    if (!authIpLimiter.consume(getClientIp(socket))) return reply(fail('RATE_LIMITED', 'Demasiados intentos. Espera un momento.'));
+    const data = isPlainObject(payload) ? payload : {};
+    return Promise.resolve(fn(data)).then(
+      (r) => (r.ok ? startSession(r.value.account, r.value.token, reply) : reply(r)),
+      (err) => { log.error('Error de autenticación:', err); reply(fail('INTERNAL_ERROR', 'Error interno del servidor.')); }
+    );
+  };
+  const authOpts = { session: false, limiter: authLimiter };
+  on(socket, 'auth:register', authHandler((d) => accounts.register(d)), authOpts);
+  on(socket, 'auth:login', authHandler((d) => accounts.login(d)), authOpts);
+  on(socket, 'auth:resume', authHandler((d) => accounts.resume(d)), authOpts);
+  on(socket, 'auth:logout', (payload, reply) => {
+    const { profile, token } = socket.data.session;
+    accounts.revoke(profile, token);
+    return reply(done({}));
+  });
 
   // --- Salas ---
   on(socket, 'rooms:list', (payload, reply) => reply(done({ rooms: rooms.listPublicRooms() })));
@@ -793,6 +797,7 @@ function registerHandlers(socket) {
       io.to(room.code).emit('chat:message', {
         from: socket.id,
         nickname: socket.data.session.profile.nickname,
+        country: socket.data.session.profile.country || null,
         text: text.value,
         at: Date.now(),
       });
@@ -811,6 +816,7 @@ function registerHandlers(socket) {
       const msg = {
         from: socket.id,
         nickname: socket.data.session.profile.nickname,
+        country: socket.data.session.profile.country || null,
         text: text.value,
         at: Date.now(),
       };
