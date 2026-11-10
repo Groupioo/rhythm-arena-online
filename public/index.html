@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=5">
+  <link rel="stylesheet" href="/css/style.css?v=7">
 </head>
 <body class="bgvideo">
   <!-- Vídeo de fondo: solo visible en el menú y en el lobby (selección de canciones), nunca en la partida -->
@@ -32,10 +32,29 @@
       <h1>Rhythm <span>Arena</span></h1>
       <p class="muted">Compite en tiempo real. Teclas: <span id="keys-hint">D F J K</span> (o toca las columnas).</p>
       <p class="online-line"><span class="online-dot" aria-hidden="true"></span><span id="login-online">Conectando…</span></p>
-      <form id="login-form" class="card">
+      <form id="login-form" class="card" autocomplete="on">
+        <div class="auth-tabs" role="tablist" aria-label="Acceso">
+          <button id="tab-login" class="atab on" type="button" role="tab" aria-selected="true">Entrar</button>
+          <button id="tab-register" class="atab" type="button" role="tab" aria-selected="false">Crear cuenta</button>
+        </div>
         <label for="nick">Tu apodo</label>
-        <input id="nick" maxlength="16" autocomplete="nickname" required placeholder="Ej: NeonFox">
-        <button class="primary" type="submit">Entrar</button>
+        <input id="nick" maxlength="16" autocomplete="username" required placeholder="Ej: NeonFox">
+        <label for="pass">Contraseña</label>
+        <input id="pass" type="password" minlength="6" maxlength="64" autocomplete="current-password" required placeholder="Mínimo 6 caracteres">
+        <div id="pass2-wrap" hidden>
+          <label for="pass2">Repetir contraseña</label>
+          <input id="pass2" type="password" minlength="6" maxlength="64" autocomplete="new-password" placeholder="Repite la contraseña">
+        </div>
+        <div id="country-wrap" hidden>
+          <label id="country-label" for="country-btn">Nacionalidad</label>
+          <button id="country-btn" class="country-btn" type="button" aria-haspopup="listbox" aria-expanded="false"><span>Elige tu país</span></button>
+          <div id="country-panel" class="country-panel" hidden>
+            <input id="country-search" type="search" placeholder="Buscar país…" autocomplete="off" aria-label="Buscar país">
+            <div id="country-grid" class="country-grid" role="listbox" aria-labelledby="country-label"></div>
+          </div>
+        </div>
+        <p id="auth-msg" class="auth-msg" role="alert"></p>
+        <button id="auth-submit" class="primary" type="submit">Entrar</button>
       </form>
     </section>
 
@@ -46,6 +65,7 @@
         <button id="btn-skins" class="icon-btn" type="button" title="Tipo de flecha" aria-label="Tipo de flecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 12h5v8h6v-8h5z"/></svg></button>
         <button id="btn-fs-menu" class="icon-btn" type="button" title="Pantalla completa" aria-label="Pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
         <button id="online-badge" class="online-badge" type="button" title="Ver jugadores conectados y chat"><span class="online-dot" aria-hidden="true"></span><span id="online-badge-text">0 en línea</span></button>
+        <button id="btn-logout" class="icon-btn" type="button" title="Cerrar sesión" aria-label="Cerrar sesión"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></button>
         <div id="me" class="profile">
           <div id="me-avatar" class="avatar" aria-hidden="true"></div>
           <div class="profile-text"><strong id="me-name"></strong><span id="me-meta" class="muted"></span></div>
@@ -240,7 +260,8 @@
   <script src="/js/keys.js?v=5"></script>
   <script src="/js/skins.js?v=5"></script>
   <script src="/js/game.js?v=5"></script>
-  <script src="/js/main.js"></script>
+  <script src="/js/countries.js?v=7"></script>
+  <script src="/js/main.js?v=7"></script>
   <script src="/js/songpicker.js"></script>
   <script src="/js/mobile.js"></script>
 </body>
