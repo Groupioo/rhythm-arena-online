@@ -69,6 +69,13 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
   }
+  // Nombre de jugador con su bandera delante
+  function nameEl(nick, country, left) {
+    const s = el('span', '');
+    const f = window.RA.flag(country); if (f) s.appendChild(f);
+    s.appendChild(document.createTextNode((left ? '✗ ' : '') + nick));
+    return s;
+  }
   async function act(fn) {
     try { return await fn(); } catch (e) { toast(e.message); return undefined; }
   }
@@ -106,42 +113,106 @@
   S.offset = Number(ls.get('ra_offset')) || 0; // calibración global en ms (consola: localStorage.ra_offset = 30)
 
   // ---------- Sesión ----------
-  async function hello(nickname) {
-    const p = await net.req('session:hello', { nickname, clientId: ls.get('ra_cid') || undefined });
-    ls.set('ra_cid', p.clientId); ls.set('ra_nick', p.nickname);
+  // Cuentas: registro / inicio de sesión con contraseña. El servidor devuelve un token para reconectar sin pedirla de nuevo.
+  function startSession(p) {
+    ls.set('ra_token', p.token); ls.set('ra_nick', p.nickname);
     S.me = p;
     renderMe();
     return p;
   }
+  const authCall = (event, payload) => net.req(event, payload).then(startSession);
+  const resumeSession = () => authCall('auth:resume', { nickname: (S.me && S.me.nickname) || ls.get('ra_nick'), token: ls.get('ra_token') });
   function renderMe() {
     const n = S.me.nickname || '?';
     let h = 0; for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) % 360;
     const av = $('me-avatar');
     av.textContent = n.trim().charAt(0).toUpperCase();
     av.style.background = `linear-gradient(135deg, hsl(${h},90%,62%), hsl(${(h + 60) % 360},90%,60%))`;
-    $('me-name').textContent = n;
+    $('me-name').replaceChildren(...[window.RA.flag(S.me.country), document.createTextNode(n)].filter(Boolean));
     $('me-meta').textContent = `${S.me.games} ${S.me.games === 1 ? 'partida' : 'partidas'}`;
     $('me-rating').textContent = `${S.me.rating} pts`;
   }
 
   show('login'); // vídeo y música desde la pantalla de inicio
   $('nick').value = ls.get('ra_nick') || '';
-  $('login-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    act(async () => {
-      await hello($('nick').value);
-      await loadCatalog().catch(() => {});
-      show('menu'); refreshRooms();
-      net.sync();
-      setInterval(() => { if (!$('screen-game').classList.contains('active')) net.sync(3); }, 30000);
-    });
+  let authMode = 'login';
+  function setAuthMode(mode) {
+    authMode = mode;
+    const reg = mode === 'register';
+    $('tab-login').classList.toggle('on', !reg); $('tab-register').classList.toggle('on', reg);
+    $('tab-login').setAttribute('aria-selected', String(!reg)); $('tab-register').setAttribute('aria-selected', String(reg));
+    $('pass2-wrap').hidden = !reg; $('pass2').required = reg;
+    $('country-wrap').hidden = !reg; if (!reg) closeCountry();
+    $('pass').autocomplete = reg ? 'new-password' : 'current-password';
+    $('auth-submit').textContent = reg ? 'Crear cuenta' : 'Entrar';
+    $('auth-msg').textContent = '';
+  }
+  // Selector de nacionalidad: todas las banderas, con buscador
+  let pickedCountry = '';
+  const cgrid = $('country-grid'), cpanel = $('country-panel'), cbtn = $('country-btn');
+  for (const c of window.RA.countries.list) {
+    const b = el('button', 'country-item'); b.type = 'button'; b.dataset.code = c.code; b.dataset.name = c.name.toLowerCase();
+    b.setAttribute('role', 'option'); b.title = c.name;
+    b.append(window.RA.flag(c.code), el('span', '', c.name));
+    cgrid.appendChild(b);
+  }
+  const closeCountry = () => { cpanel.hidden = true; cbtn.setAttribute('aria-expanded', 'false'); };
+  cbtn.addEventListener('click', () => {
+    cpanel.hidden = !cpanel.hidden; cbtn.setAttribute('aria-expanded', String(!cpanel.hidden));
+    if (!cpanel.hidden) $('country-search').focus();
   });
+  $('country-search').addEventListener('input', () => {
+    const q = $('country-search').value.trim().toLowerCase();
+    for (const b of cgrid.children) b.hidden = q !== '' && !b.dataset.name.includes(q);
+  });
+  $('country-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); if (e.key === 'Escape') closeCountry(); });
+  cgrid.addEventListener('click', (e) => {
+    const b = e.target.closest('.country-item'); if (!b) return;
+    pickedCountry = b.dataset.code;
+    for (const x of cgrid.children) x.classList.toggle('on', x === b);
+    cbtn.replaceChildren(window.RA.flag(pickedCountry), el('span', '', window.RA.countries.nameOf(pickedCountry)));
+    closeCountry();
+  });
+  $('tab-login').addEventListener('click', () => setAuthMode('login'));
+  $('tab-register').addEventListener('click', () => setAuthMode('register'));
+
+  async function enterMenu() {
+    await loadCatalog().catch(() => {});
+    show('menu'); refreshRooms();
+    net.sync();
+    setInterval(() => { if (!$('screen-game').classList.contains('active')) net.sync(3); }, 30000);
+  }
+  $('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('auth-submit'), msg = $('auth-msg');
+    msg.textContent = ''; btn.disabled = true;
+    try {
+      if (authMode === 'register') {
+        if (!pickedCountry) throw new Error('Elige tu nacionalidad.');
+        await authCall('auth:register', { nickname: $('nick').value, password: $('pass').value, password2: $('pass2').value, country: pickedCountry });
+      } else {
+        await authCall('auth:login', { nickname: $('nick').value, password: $('pass').value });
+      }
+      $('pass').value = ''; $('pass2').value = '';
+      await enterMenu();
+    } catch (err) { msg.textContent = err.message; }
+    btn.disabled = false;
+  });
+  $('btn-logout').addEventListener('click', () => {
+    const done = () => { ls.set('ra_token', ''); location.reload(); };
+    net.req('auth:logout').then(done, done);
+  });
+  // Inicio automático si este navegador ya tiene una sesión guardada
+  if (ls.get('ra_token') && ls.get('ra_nick')) {
+    resumeSession().then(enterMenu).catch(() => { S.me = null; ls.set('ra_token', ''); });
+  }
 
   net.socket.on('disconnect', () => toast('Conexión perdida. Reconectando…'));
   net.socket.on('connect', () => {
     if (!S.me) return;
     game.stop(); stopQueue(); S.room = null;
-    act(async () => { await hello(S.me.nickname); show('menu'); net.sync(); toast('Reconectado.'); });
+    resumeSession().then(() => { show('menu'); net.sync(); toast('Reconectado.'); })
+      .catch(() => { S.me = null; ls.set('ra_token', ''); show('login'); toast('Sesión caducada. Inicia sesión de nuevo.'); });
   });
 
   // ---------- Menú ----------
@@ -206,7 +277,7 @@
     const ol = $('scoreboard');
     ol.replaceChildren();
     const li = el('li');
-    li.appendChild(el('span', '', S.me.nickname));
+    li.appendChild(nameEl(S.me.nickname, S.me.country));
     li.appendChild(el('span', '', String(st.score)));
     ol.appendChild(li);
   }
@@ -392,7 +463,7 @@
         const tr = el('tr', r.playerId === net.socket.id ? 'me' : '');
         const rk = el('td'); rk.appendChild(el('span', 'rk rk' + Math.min(r.rank, 4), String(r.rank))); tr.appendChild(rk);
         [r.nickname + (r.left ? ' (abandonó)' : ''), ...(showSong ? [songName(r.songId)] : []), fmtNum(r.score), r.accuracy + '%', fmtNum(r.maxCombo),
-          ...(byRound ? [(r.rounds || []).map((x, i) => `R${i + 1} ${fmtNum(x.score)}`).join(' · ')] : [])].forEach((v) => tr.appendChild(el('td', '', String(v))));
+          ...(byRound ? [(r.rounds || []).map((x, i) => `R${i + 1} ${fmtNum(x.score)}`).join(' · ')] : [])].forEach((v, i) => tr.appendChild(i === 0 ? (() => { const td = el('td'); td.appendChild(nameEl(String(v), r.country)); return td; })() : el('td', '', String(v))));
         if (o.ranked) {
           const sign = r.ratingChange > 0 ? '+' : '';
           tr.appendChild(el('td', r.ratingChange >= 0 ? 'pos' : 'neg', `${r.ratingAfter} (${sign}${r.ratingChange})`));
@@ -652,6 +723,7 @@
     for (const p of order) {
       const li = el('li');
       const left = el('span', '', `${p.nickname} (${p.rating})`);
+      { const f = window.RA.flag(p.country); if (f) left.prepend(f); }
       if (p.isHost && !r.ranked) left.appendChild(el('span', 'badge', 'anfitrión'));
       if (r.ranked || p.isHost) {
         const names = p.picks && p.picks.length ? p.picks.map((x) => songName(x.songId)).join(' + ') : '';
@@ -754,6 +826,7 @@
     const mine = S.me && m.nickname === S.me.nickname;
     const row = el('div', mine ? 'gchat-msg me' : 'gchat-msg');
     const nick = el('span', 'nick', m.nickname.slice(0, 16));
+    { const f = window.RA.flag(m.country); if (f) nick.prepend(f); }
     nick.style.color = mine ? '' : `hsl(${hueOf(m.nickname)},90%,70%)`;
     const d = new Date(Number(m.at) || Date.now());
     const time = el('span', 'time', `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
@@ -864,7 +937,7 @@
     ol.replaceChildren();
     for (const row of d.scoreboard) {
       const li = el('li');
-      li.appendChild(el('span', '', (row.left ? '✗ ' : '') + row.nickname));
+      li.appendChild(nameEl(row.nickname, row.country, row.left));
       li.appendChild(el('span', '', String(row.score)));
       ol.appendChild(li);
     }
