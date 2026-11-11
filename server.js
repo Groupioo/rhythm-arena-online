@@ -8,6 +8,8 @@
  *   time:sync          { clientTime }                       -> { clientTime, serverTime }
  *   session:hello      { nickname, clientId? }              -> { clientId, nickname, rating, games }
  *   rooms:list                                              -> { rooms }
+ *   online:join                                             -> { room }  (clasificatoria online: sala de espera de hasta 6 jugadores)
+ *   online:start       { want }                             confirma/retira "empezar con los jugadores que hay" (sala de espera)
  *   room:create        { songId, durationMs, totalNotes, difficulty, maxPlayers, isPrivate } (todos opcionales)
  *   room:join          { code }
  *   room:leave
@@ -138,6 +140,9 @@ const config = {
     rankedPickMs: envInt('RANKED_PICK_MS', 180000, { min: 5000, max: 600000 }), // tiempo para elegir canciones y dar listo (3 min)
     casualRoomTtlMs: envInt('CASUAL_ROOM_TTL_MS', 600000, { min: 1000 }),
     ratingK: envInt('RATING_K_FACTOR', 32, { min: 1, max: 200 }),
+    pointsPerPlayer: envInt('POINTS_PER_PLAYER', 16, { min: 1, max: 1000 }), // clasificatoria: 1.º gana esto × nº de jugadores
+    paidPlaces: envInt('PAID_PLACES', 3, { min: 1, max: 12 }), // puestos que puntúan (siempre queda al menos 1 sin puntos)
+    onlineMaxPlayers: envInt('ONLINE_MAX_PLAYERS', 6, { min: 2, max: 12 }), // jugadores de la clasificatoria online
   },
   matchmaking: {
     tickMs: envInt('MATCHMAKING_TICK_MS', 1000, { min: 200 }),
@@ -420,6 +425,10 @@ rooms.on('finished', ({ room, results, reason }) => {
   });
 });
 
+rooms.on('pickStart', (room) => {
+  log.info(`Sala online ${room.code}: empieza la selección de canciones con ${room.players.size} jugadores.`);
+});
+
 rooms.on('closed', ({ code, reason }) => {
   io.to(code).emit('room:closed', { code, reason });
   io.in(code).socketsLeave(code);
@@ -621,6 +630,22 @@ function registerHandlers(socket) {
 
   // --- Salas ---
   on(socket, 'rooms:list', (payload, reply) => reply(done({ rooms: rooms.listPublicRooms() })));
+
+  // --- Clasificatoria online: sala de espera de hasta 6 jugadores ---
+  on(socket, 'online:join', (payload, reply) => {
+    if (rooms.getRoomByPlayer(socket.id)) return reply(fail('IN_ROOM', 'Sal de tu sala actual antes de jugar online.'));
+    matchmaker.dequeue(socket.id);
+    const result = rooms.joinOnline(playerOf(socket));
+    if (!result.ok) return reply(result);
+    socket.join(result.room.code);
+    return reply(done({ room: rooms.serialize(result.room, socket.id) }));
+  });
+
+  on(socket, 'online:start', (payload, reply) => {
+    if (!isPlainObject(payload) || typeof payload.want !== 'boolean') return reply(fail('INVALID_PAYLOAD', 'Datos inválidos.'));
+    const result = rooms.setWaitingStart(socket.id, payload.want);
+    return reply(result.ok ? done() : result);
+  });
 
   on(socket, 'room:create', (payload, reply) => {
     const song = resolveSongSettings(payload);
