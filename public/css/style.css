@@ -912,3 +912,7 @@ body.playing,body.playing .game-wrap,canvas#stage{touch-action:none;-ms-touch-ac
 .combo-tag.fc{color:var(--lime);background:rgba(125,255,79,.12);border-color:rgba(125,255,79,.38)}
 .combo-tag.ap{color:#ffd84a;background:rgba(255,216,74,.12);border-color:rgba(255,216,74,.4)}
 td.acc-full{color:#ffd84a;font-weight:800}
+
+/* Chat del lobby de la clasificatoria */
+.lobby-chat .gchat-log{height:170px;margin-top:0}
+.lobby-chat[hidden]{display:none}
