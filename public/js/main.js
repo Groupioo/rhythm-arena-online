@@ -678,29 +678,43 @@
     } catch (e) { /* no soportado */ }
   });
 
-  // ---------- Matchmaking ----------
-  function stopQueue() {
-    S.queued = false; clearInterval(S.queueTimer);
-    $('queue-status').textContent = '';
-    $('btn-quick').textContent = 'Buscar partida';
-  }
-  $('btn-quick').addEventListener('click', () => act(async () => {
-    if (S.queued) { await net.req('matchmaking:leave'); stopQueue(); return; }
-    await net.req('matchmaking:join', { mode: 'ranked' });
-    S.queued = true;
-    $('btn-quick').textContent = 'Cancelar búsqueda';
-    S.queueTimer = setInterval(() => act(async () => {
-      const st = await net.req('matchmaking:status');
-      if (!st.queued) return;
-      $('queue-status').textContent =
-        `Buscando… ${Math.round(st.waitedMs / 1000)} s · rango ±${st.ratingWindow} · ${st.playersInQueue} en cola`;
-    }), 1000);
-  }));
-  net.socket.on('matchmaking:found', (d) => {
-    stopQueue(); S.autoPickSent = false; S.room = d.room; renderLobby(); show('lobby');
-    toast('¡Partida encontrada! Elige tu canción.');
+  // ---------- Clasificatoria online (hasta 6 jugadores) ----------
+  // "Jugar online" te mete en una sala de espera. La partida empieza sola al llegar a 6 jugadores, o cuando todos los
+  // presentes (mínimo 2) confirman que quieren empezar con los que hay. Después cada jugador elige UNA canción.
+  function stopQueue() { $('queue-status').textContent = ''; }
+  $('btn-quick').addEventListener('click', () => {
+    const btn = $('btn-quick'); btn.disabled = true;
+    act(async () => {
+      const d = await net.req('online:join');
+      S.autoPickSent = false; S.room = d.room; renderLobby(); show('lobby');
+    }).finally(() => { btn.disabled = false; });
   });
-  net.socket.on('matchmaking:timeout', () => { stopQueue(); toast('No se encontró partida. Inténtalo de nuevo.'); });
+  $('btn-wait-start').addEventListener('click', () => {
+    const me = S.room && S.room.players.find((p) => p.id === net.socket.id);
+    act(() => net.req('online:start', { want: !(me && me.wantsStart) }));
+  });
+  // Premios de la partida con los jugadores actuales, p. ej. "Premios: 1.º +96 · 2.º +80 · 3.º +64" (cambian si entra o sale alguien)
+  const prizeText = (r) => (r.prizes && r.prizes.length ? `Premios: ${r.prizes.map((p, i) => `${i + 1}.º +${p}`).join(' · ')}` : '');
+  // Sala de espera: puntos de jugadores, cuántos quieren empezar y el botón de confirmar
+  function renderWait(r, me) {
+    const card = $('wait-card');
+    card.hidden = !(r.ranked && r.waiting && r.state === 'lobby');
+    if (card.hidden) return;
+    const n = r.players.length, max = r.maxPlayers, min = r.minPlayers || 2;
+    const voted = r.players.filter((p) => p.wantsStart).length, want = Boolean(me && me.wantsStart);
+    const dots = $('wait-dots');
+    dots.replaceChildren();
+    for (let i = 0; i < max; i += 1) dots.appendChild(el('span', `wait-dot${i < n ? ' on' : ''}`));
+    $('wait-title').textContent = `Esperando jugadores · ${n}/${max}`;
+    $('wait-prizes').textContent = prizeText(r);
+    const btn = $('btn-wait-start');
+    btn.disabled = n < min;
+    btn.classList.toggle('primary', !want);
+    btn.textContent = n < min ? `Faltan jugadores (mínimo ${min})` : want ? 'Cancelar · seguir esperando' : `Empezar con ${n} jugadores`;
+    $('wait-text').textContent = n < min
+      ? 'Esperando a que entre otro jugador. Puedes salir cuando quieras.'
+      : `La partida empieza sola al llegar a ${max} jugadores. Si no quieres esperar, pulsa empezar: arrancará cuando todos lo confirmen (${voted}/${n} quieren empezar). Si entra o sale alguien, hay que confirmar de nuevo.`;
+  }
 
   // ---------- Lobby ----------
   const songSel = $('song');
@@ -840,7 +854,7 @@
   function renderPickTimer(r) {
     clearInterval(pickTimer); pickTimer = 0;
     const info = $('pick-info');
-    if (!r.ranked || r.state !== 'lobby') { info.hidden = true; return; }
+    if (!r.ranked || r.state !== 'lobby' || r.waiting) { info.hidden = true; $('pick-clock').hidden = true; return; }
     // Hay un tiempo límite (3 min): la partida empieza en cuanto todos han elegido sus canciones y están listos.
     // Si se agota, el servidor completa al azar las canciones que falten y empieza.
     const me = r.players.find((p) => p.id === net.socket.id);
@@ -854,9 +868,10 @@
         clock.hidden = false;
         if (left <= 0) clearInterval(pickTimer);
       } else clock.hidden = true;
-      info.textContent = `Clasificatoria de ${r.totalSongs || 4} canciones: te toca elegir ${me && me.quota ? me.quota : r.maxSongs}. `
+      info.textContent = `Cada jugador elige 1 canción (${r.players.length} en total). `
+        + `${prizeText(r)}${r.prizes && r.prizes.length ? ' pts. ' : ''}`
         + `Cuando todos estén listos empieza la partida (${ready}/${r.players.length} listos).`
-        + (r.pickDeadline ? ' Si se acaba el tiempo, se completan al azar las canciones que falten.' : '');
+        + (r.pickDeadline ? ' Si se acaba el tiempo, se elige al azar la canción de quien no la haya elegido.' : '');
     };
     info.hidden = false; tick();
     if (r.pickDeadline) pickTimer = setInterval(tick, 500);
@@ -878,7 +893,10 @@
     const song = allSongs.find((s) => s.songId === (cur && cur.songId));
     const label = song ? `${song.name} (${song.bpm} BPM)` : (cur && cur.songId) || 'Sin canción';
     const guestCasual = !r.ranked && !isHost();
-    if (guestCasual) {
+    const waiting = Boolean(r.ranked && r.waiting);
+    if (waiting) {
+      $('lobby-info').textContent = `Clasificatoria online · ${r.players.length}/${r.maxPlayers} jugadores`;
+    } else if (guestCasual) {
       // Invitado en sala casual: solo ve lo que ha elegido el anfitrión.
       const names = (r.plan || []).map((x) => songName(x.songId));
       const list = names.length ? names.join(' + ') : 'el anfitrión aún no ha elegido canciones';
@@ -895,25 +913,27 @@
       const left = el('span', '', `${p.nickname} (${p.rating})`);
       { const f = window.RA.flag(p.country); if (f) left.prepend(f); }
       if (p.isHost && !r.ranked) left.appendChild(el('span', 'badge', 'anfitrión'));
-      if (r.ranked || p.isHost) {
+      if (!waiting && (r.ranked || p.isHost)) {
         const names = p.picks && p.picks.length ? p.picks.map((x) => songName(x.songId)).join(' + ') : '';
         left.appendChild(el('span', 'muted', names ? ` · ${names}` : p.song ? ` · ${songName(p.song.songId)}` : ' · eligiendo…'));
       }
       li.appendChild(left);
-      const ready = p.ready || (p.isHost && !r.ranked);
-      li.appendChild(el('span', ready ? 'badge ok' : 'badge', ready ? 'listo' : 'esperando'));
+      const ready = waiting ? Boolean(p.wantsStart) : p.ready || (p.isHost && !r.ranked);
+      const label = waiting ? (ready ? 'quiere empezar' : 'esperando') : (ready ? 'listo' : 'esperando');
+      li.appendChild(el('span', ready ? 'badge ok' : 'badge', label));
       ul.appendChild(li);
     }
 
     // Casual: solo el anfitrión elige la canción. Clasificatoria: cada jugador elige la SUYA.
     // Casual por turnos: todos eligen SU canción; se juega primero la del anfitrión y luego la de cada jugador.
-    $('host-controls').hidden = !r.ranked && !isHost(); // casual: los invitados no ven el selector de canciones
+    $('host-controls').hidden = (!r.ranked && !isHost()) || waiting; // casual: los invitados no ven el selector de canciones
     $('btn-start').hidden = r.ranked || !isHost(); // la clasificatoria arranca sola cuando todos están listos
     $('host-controls-hint').hidden = false;
     $('host-controls-hint').textContent = r.ranked
-      ? `Elige tus ${r.maxSongs} ${r.maxSongs === 1 ? 'canción' : 'canciones'} (la partida tiene ${r.totalSongs || 4} en total entre todos los jugadores). Se juegan por turnos y el combo continúa de una a la siguiente.`
+      ? 'Elige tu canción: cada jugador elige una. Se juegan por turnos y el combo continúa de una a la siguiente.'
       : `Solo tú, como anfitrión, eliges las canciones de la sala: de 1 a ${r.maxSongs || 4}. Las jugáis todos seguidas, en el orden que las pongas, y el combo continúa de una a la siguiente.`;
-    $('btn-ready').hidden = !r.ranked && isHost();
+    $('btn-ready').hidden = (!r.ranked && isHost()) || waiting;
+    renderWait(r, me);
     $('btn-ready').textContent = me && me.ready ? 'Cancelar listo' : 'Estoy listo';
     if (cur && cur.songId && !S.pickPending) songSel.value = cur.songId;
     if (cur && cur.difficulty) $('difficulty').value = cur.difficulty;
@@ -937,7 +957,7 @@
     if (r.plan) S.roundPlan = r.plan; // para precargar la canción de la ronda siguiente durante la partida
 
     // Clasificatoria: si aún no has elegido, se registra la canción que muestra el selector.
-    if (r.ranked && r.state === 'lobby' && me && !me.picked && !S.autoPickSent && allSongs.some((s) => s.songId === songSel.value)) {
+    if (r.ranked && !r.waiting && r.state === 'lobby' && me && !me.picked && !S.autoPickSent && allSongs.some((s) => s.songId === songSel.value)) {
       S.autoPickSent = true;
       sendSettings();
     }
@@ -949,7 +969,9 @@
 
   // ---------- Eventos de sala y partida ----------
   net.socket.on('room:state', (room) => {
+    const was = S.room;
     S.room = room;
+    if (was && was.code === room.code && was.waiting && !room.waiting && room.state === 'lobby') toast('¡Empieza la partida! Elige tu canción.');
     if (room.state === 'lobby') { game.stop(); renderLobby(); show('lobby'); }
     else stopPickTimer();
     if (room.state === 'finished') $('btn-rematch').hidden = room.ranked || !isHost();
@@ -959,11 +981,12 @@
   });
   net.socket.on('room:closed', (d) => {
     const WHY = {
-      opponent_left: 'tu rival abandonó antes de empezar', no_pick: 'no elegiste canción a tiempo',
+      opponent_left: 'los demás jugadores abandonaron antes de empezar', no_pick: 'no elegiste canción a tiempo',
       not_enough_players: 'no hay suficientes jugadores', empty: 'sala vacía', expired: 'sala expirada',
     };
     stopPickTimer(); game.stop(); stopQueue(); S.room = null; show('menu');
-    toast('Sala cerrada: ' + (WHY[d.reason] || d.reason)); refreshRooms().catch(() => {});
+    if (d.reason !== 'empty') toast('Sala cerrada: ' + (WHY[d.reason] || d.reason)); // 'empty': saliste tú mismo
+    refreshRooms().catch(() => {});
   });
   net.socket.on('profile:update', (p) => { S.me = p; renderMe(); });
 
