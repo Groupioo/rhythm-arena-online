@@ -559,9 +559,16 @@
     const badges = $('res-badges');
     badges.replaceChildren();
     const st = o.stats;
-    if (st && o.total > 0 && st.miss === 0 && st.perfect + st.great + st.good >= o.total) {
-      badges.appendChild(el('span', st.great + st.good === 0 ? 'pill gold' : 'pill lime', st.great + st.good === 0 ? 'All Perfect' : 'Full Combo'));
-    }
+    // 'ap' = All Perfect (todo Perfect, 100 % de precisión) · 'fc' = Full Combo (sin ningún Miss) · null = ninguno.
+    // Se calcula con los datos de golpes de cada jugador (los del servidor en online), igual para todos.
+    const comboFlag = (s, total) => {
+      if (!s || !(total > 0) || s.left || s.miss > 0 || s.perfect + s.great + s.good < total) return null;
+      return s.great + s.good === 0 ? 'ap' : 'fc';
+    };
+    // Tu insignia: en online se usa tu fila del servidor (misma fuente que la tabla); en solo, tus estadísticas locales.
+    const myRow = o.rows ? o.rows.find((r) => r.playerId === net.socket.id) : null;
+    const myFlag = myRow ? comboFlag(myRow, myRow.totalNotes) : comboFlag(st, o.total);
+    if (myFlag) badges.appendChild(el('span', myFlag === 'ap' ? 'pill gold' : 'pill lime', myFlag === 'ap' ? 'All Perfect · 100%' : 'Full Combo'));
     if (o.record) badges.appendChild(el('span', 'pill pink', 'Nuevo récord'));
     else if (o.best && o.best > o.score) badges.appendChild(el('span', 'pill', `Tu récord: ${fmtNum(o.best)}`));
     if (o.rank) badges.appendChild(el('span', 'pill', `Puesto ${o.rank} de ${o.players}`));
@@ -633,7 +640,13 @@
         const tr = el('tr', r.playerId === net.socket.id ? 'me' : '');
         const rk = el('td'); rk.appendChild(el('span', 'rk rk' + Math.min(r.rank, 4), String(r.rank))); tr.appendChild(rk);
         [r.nickname + (r.left ? ' (abandonó)' : ''), ...(showSong ? [songName(r.songId)] : []), fmtNum(r.score), r.accuracy + '%', fmtNum(r.maxCombo),
-          ...(byRound ? [(r.rounds || []).map((x, i) => `R${i + 1} ${fmtNum(x.score)}`).join(' · ')] : [])].forEach((v, i) => tr.appendChild(i === 0 ? (() => { const td = el('td'); td.appendChild(nameEl(String(v), r.country)); return td; })() : el('td', '', String(v))));
+          ...(byRound ? [(r.rounds || []).map((x, i) => `R${i + 1} ${fmtNum(x.score)}`).join(' · ')] : [])].forEach((v, i) => tr.appendChild(i === 0 ? (() => {
+          const td = el('td'); td.appendChild(nameEl(String(v), r.country));
+          // Insignia junto al nombre de cada jugador que hizo Full Combo / All Perfect
+          const fl = comboFlag(r, r.totalNotes);
+          if (fl) td.appendChild(el('span', `combo-tag ${fl}`, fl === 'ap' ? 'AP' : 'FC'));
+          return td;
+        })() : el('td', r.accuracy >= 100 && i === (showSong ? 3 : 2) ?'acc-full' : '', String(v))));
         if (o.ranked) {
           const sign = r.ratingChange > 0 ? '+' : '';
           tr.appendChild(el('td', r.ratingChange >= 0 ? 'pos' : 'neg', `${r.ratingAfter} (${sign}${r.ratingChange})`));
