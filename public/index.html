@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=9">
+  <link rel="stylesheet" href="/css/style.css?v=11">
 </head>
 <body class="bgvideo">
   <!-- Vídeo de fondo: solo visible en el menú y en el lobby (selección de canciones), nunca en la partida -->
@@ -107,12 +107,9 @@
           <article class="card mode ranked">
             <div class="card-head">
               <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></div>
-              <div><h3>Clasificatoria</h3><p class="muted">Sube de rating contra rivales de tu nivel.</p></div>
+              <div><h3>Clasificatoria</h3><p class="muted">Hasta 6 jugadores online. Sube de rating y elige tu canción.</p></div>
             </div>
-            <div class="fields one">
-              <div class="field"><label for="quick-speed">Velocidad</label><select id="quick-speed" class="speed-select"></select></div>
-            </div>
-            <button id="btn-quick" class="primary big">Buscar partida</button>
+            <button id="btn-quick" class="primary big">Jugar online</button>
             <p id="queue-status" class="muted"></p>
           </article>
 
@@ -159,6 +156,13 @@
       <h2>Sala <span id="lobby-code" class="code"></span></h2>
       <p id="lobby-info" class="muted"></p>
       <p id="pick-info" class="muted" hidden></p>
+      <div id="wait-card" class="card wait-card" hidden>
+        <h3 id="wait-title">Esperando jugadores</h3>
+        <div id="wait-dots" class="wait-dots" aria-hidden="true"></div>
+        <p id="wait-prizes" class="wait-prizes"></p>
+        <p id="wait-text" class="muted"></p>
+        <button id="btn-wait-start" class="primary" type="button">Empezar</button>
+      </div>
       <ul id="players" class="list card"></ul>
       <div id="plan-card" class="card" hidden>
         <h3>Orden de canciones</h3>
@@ -303,7 +307,7 @@
   <script src="/js/skins.js?v=5"></script>
   <script src="/js/game.js?v=5"></script>
   <script src="/js/countries.js?v=7"></script>
-  <script src="/js/main.js?v=9"></script>
+  <script src="/js/main.js?v=11"></script>
   <script src="/js/songpicker.js"></script>
   <script src="/js/mobile.js"></script>
 </body>
