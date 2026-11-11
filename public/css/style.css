@@ -906,3 +906,9 @@ body.playing,body.playing .game-wrap,canvas#stage{touch-action:none;-ms-touch-ac
   .gamechat-log{max-height:110px}
 }
 @media(prefers-reduced-motion:reduce){.gc-msg{transition:none}}
+
+/* ---------- Full Combo / All Perfect en la clasificación ---------- */
+.combo-tag{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:99px;font-size:.7rem;font-weight:800;letter-spacing:.06em;vertical-align:1px;border:1px solid transparent}
+.combo-tag.fc{color:var(--lime);background:rgba(125,255,79,.12);border-color:rgba(125,255,79,.38)}
+.combo-tag.ap{color:#ffd84a;background:rgba(255,216,74,.12);border-color:rgba(255,216,74,.4)}
+td.acc-full{color:#ffd84a;font-weight:800}
