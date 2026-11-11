@@ -14,7 +14,12 @@
  * CADA jugador elige su canción (player.chart). Cuando todos están listos (o vence
  * el tiempo de selección) empieza la cuenta atrás y se juega igual que en casual, por rondas.
  *
- * CANCIONES POR PARTIDA (ambos modos): cada jugador puede elegir hasta SET_SONGS_MAX canciones
+ * Clasificatoria ONLINE (botón "Jugar online"): hasta `onlineMaxPlayers` (6) jugadores. Primero hay una SALA DE ESPERA
+ * (room.waiting): se llena sola con quien pulsa "Jugar online". Empieza la fase de selección cuando se completan los 6
+ * o cuando TODOS los presentes (mínimo 2) confirman que quieren empezar con los que hay (player.wantsStart; si entra o
+ * sale alguien, las confirmaciones se reinician). En la selección cada jugador elige UNA canción y se juegan por turnos.
+ *
+ * CANCIONES POR PARTIDA (casual): cada jugador puede elegir hasta SET_SONGS_MAX canciones
  * (la 1.ª en player.chart / room.settings del anfitrión, el resto en player.more). Las rondas se
  * reparten por turnos entre los jugadores (anfitrión primero) y la partida tiene como máximo
  * SET_SONGS_MAX canciones en total.
@@ -44,6 +49,7 @@ const ROOM_STATES = Object.freeze({
 
 const DEFAULT_OPTIONS = Object.freeze({
   maxPlayers: 4,
+  onlineMaxPlayers: 6, // jugadores de una sala clasificatoria online
   minPlayersToStart: 2,
   codeLength: 5,
   countdownMs: 5_000,
@@ -55,7 +61,9 @@ const DEFAULT_OPTIONS = Object.freeze({
   autoPick: null, // () => { songId, difficulty, durationMs, totalNotes } | null (canción si alguien no elige)
   casualRoomTtlMs: 600_000,
   maxRooms: 1_000,
-  ratingK: 32,
+  ratingK: 32, // ya no se usa en clasificatoria (se conserva por compatibilidad)
+  pointsPerPlayer: 16, // clasificatoria: puntos de base; el 1.º gana 16 × nº de jugadores
+  paidPlaces: 3, // clasificatoria: cuántos puestos puntúan como máximo (siempre queda al menos 1 sin puntos)
 });
 
 const JUDGEMENT_WEIGHTS = Object.freeze({ perfect: 1, great: 0.85, good: 0.5 });
@@ -85,7 +93,18 @@ function accuracyOf(stats, denominator) {
 }
 
 /**
- * Cambio de rating tipo Elo para varios jugadores (comparación por parejas).
+ * Puntos de clasificatoria por puesto. Sistema fijo, sin restar nunca:
+ *   puesto p con N jugadores -> perPlayer × (N − p + 1), solo para los primeros `paidPlaces` puestos
+ *   (y siempre dejando al último sin puntos); el resto suma 0.
+ *   Con 16 puntos: 6 jugadores -> 96 / 80 / 64 · 5 jugadores -> 80 / 64 / 48 · 2 jugadores -> 32.
+ */
+function pointsForRank(rank, players, { pointsPerPlayer = 16, paidPlaces = 3 } = {}) {
+  const paid = Math.min(paidPlaces, Math.max(0, players - 1));
+  return rank >= 1 && rank <= paid ? pointsPerPlayer * (players - rank + 1) : 0;
+}
+
+/**
+ * Cambio de rating tipo Elo para varios jugadores (YA NO se usa: la clasificatoria reparte puntos fijos por puesto) (comparación por parejas).
  * entries: [{ id, rating, rank }]  ->  Map(id -> delta entero)
  */
 function computeRatingChanges(entries, k = 32) {
@@ -186,7 +205,10 @@ class RoomManager extends EventEmitter {
       startAt: room.startAt,
       // Clasificatoria: la partida tiene SET_SONGS_MAX canciones en total y a cada jugador le toca su parte.
       maxSongs: room.ranked && own ? this._quota(room, own.id) : LIMITS.SET_SONGS_MAX,
-      totalSongs: LIMITS.SET_SONGS_MAX,
+      totalSongs: this._songCap(room),
+      waiting: Boolean(room.waiting), // clasificatoria online esperando a más jugadores
+      prizes: room.ranked ? this.prizesFor(room.players.size) : null, // puntos del 1.º, 2.º... con los jugadores actuales
+      minPlayers: this.options.minPlayersToStart,
       plan: plan
         ? plan.map((r) => ({
             ownerId: r.ownerId,
@@ -209,6 +231,7 @@ class RoomManager extends EventEmitter {
         country: p.country ?? null,
         rating: p.rating,
         ready: p.ready,
+        wantsStart: Boolean(p.wantsStart), // en la sala de espera: quiere empezar con los jugadores que hay
         quota: room.ranked ? this._quota(room, p.id) : null,
         isHost: p.id === room.hostId,
         finished: p.finished,
@@ -219,6 +242,16 @@ class RoomManager extends EventEmitter {
         picks: this._pickList(room, p).map((c) => ({ songId: c.songId, difficulty: c.difficulty })),
       })),
     };
+  }
+
+  /** Puntos que se llevan los primeros puestos con `n` jugadores, p. ej. 6 -> [96, 80, 64]. */
+  prizesFor(n) {
+    const out = [];
+    for (let rank = 1; rank <= n; rank += 1) {
+      const pts = pointsForRank(rank, n, this.options);
+      if (pts > 0) out.push(pts);
+    }
+    return out;
   }
 
   /** Marcador en vivo, ordenado por puntuación. */
@@ -233,19 +266,20 @@ class RoomManager extends EventEmitter {
   // Lobby
   // ------------------------------------------------------------------
 
-  createRoom({ host, settings = {}, ranked = false }) {
+  createRoom({ host, settings = {}, ranked = false, waiting = false }) {
     if (this.playerRoom.has(host.id)) return fail('ALREADY_IN_ROOM', 'Ya estás en una sala.');
     if (this.rooms.size >= this.options.maxRooms) return fail('SERVER_FULL', 'El servidor no admite más salas ahora mismo.');
 
     const code = this._generateCode();
     if (!code) return fail('SERVER_BUSY', 'No se pudo generar un código de sala. Inténtalo de nuevo.');
 
-    const cap = this.options.maxPlayers;
+    const cap = ranked ? this.options.onlineMaxPlayers : this.options.maxPlayers;
     const room = {
       code,
       hostId: host.id,
       state: ROOM_STATES.LOBBY,
       ranked,
+      waiting: ranked && waiting, // sala de espera de la clasificatoria online (aún sin fase de selección)
       isPrivate: ranked ? true : Boolean(settings.isPrivate),
       maxPlayers: Math.min(settings.maxPlayers ?? cap, cap),
       settings: {
@@ -290,9 +324,38 @@ class RoomManager extends EventEmitter {
     const state = this._newPlayer(player);
     room.players.set(player.id, state);
     this.playerRoom.set(player.id, code);
+    if (room.waiting) this._resetVotes(room); // cambia el grupo: todos deben confirmar de nuevo
 
     this.emit('playerJoined', { room, player: state });
     this.emit('update', room);
+    this._maybeEndWaiting(room); // si se completó la sala, empieza la selección de canciones
+    return { ok: true, room };
+  }
+
+  /**
+   * Clasificatoria online: entra en la sala de espera que tenga hueco o crea una nueva.
+   * No se empareja por rating: entra quien llegue (el cambio de rating sigue calculándose entre todos).
+   */
+  joinOnline(player) {
+    if (this.playerRoom.has(player.id)) return fail('ALREADY_IN_ROOM', 'Ya estás en una sala.');
+    const open = this._openOnlineRoom();
+    if (open) return this.joinRoom(open.code, player, { internal: true });
+    return this.createRoom({ host: player, ranked: true, waiting: true });
+  }
+
+  /** Sala de espera: un jugador confirma (o retira) que quiere empezar con los jugadores que hay ahora mismo. */
+  setWaitingStart(playerId, want) {
+    const room = this.getRoomByPlayer(playerId);
+    if (!room) return fail('NOT_IN_ROOM', 'No estás en ninguna sala.');
+    if (!room.ranked || !room.waiting || room.state !== ROOM_STATES.LOBBY) {
+      return fail('INVALID_STATE', 'La sala ya no está esperando jugadores.');
+    }
+    if (want && room.players.size < this.options.minPlayersToStart) {
+      return fail('NOT_ENOUGH_PLAYERS', `Se necesitan al menos ${this.options.minPlayersToStart} jugadores para empezar.`);
+    }
+    room.players.get(playerId).wantsStart = Boolean(want);
+    this.emit('update', room);
+    this._maybeEndWaiting(room);
     return { ok: true, room };
   }
 
@@ -353,9 +416,13 @@ class RoomManager extends EventEmitter {
 
     this.emit('playerLeft', { room, player, reason });
 
+    // En la sala de espera el grupo cambió: las confirmaciones de empezar se reinician (y no se cierra aunque quede 1).
+    if (room.waiting) this._resetVotes(room);
+
     // Clasificatoria en fase de selección: si queda un solo jugador, no hay partida.
     if (
       room.ranked &&
+      !room.waiting &&
       room.state === ROOM_STATES.LOBBY &&
       room.players.size < this.options.minPlayersToStart
     ) {
@@ -382,6 +449,7 @@ class RoomManager extends EventEmitter {
     const room = this.getRoomByPlayer(playerId);
     if (!room) return fail('NOT_IN_ROOM', 'No estás en ninguna sala.');
     if (room.state !== ROOM_STATES.LOBBY) return fail('INVALID_STATE', 'Solo puedes cambiar tu estado en el lobby.');
+    if (room.waiting) return fail('INVALID_STATE', 'Aún se está esperando a más jugadores.');
     const player = room.players.get(playerId);
     if (ready && room.ranked && !player.chart) {
       return fail('NO_SONG', 'Elige tu canción antes de marcarte como listo.');
@@ -416,11 +484,12 @@ class RoomManager extends EventEmitter {
       return fail('USE_SETTINGS', 'El anfitrión elige su primera canción con los ajustes de la sala.');
     }
     if (room.state !== ROOM_STATES.LOBBY) return fail('INVALID_STATE', 'Ya no puedes cambiar de canción.');
+    if (room.waiting) return fail('INVALID_STATE', 'Podrás elegir tu canción cuando empiece la partida.');
     if (!Number.isInteger(slot) || slot < 0 || slot >= LIMITS.SET_SONGS_MAX) {
       return fail('INVALID_SLOT', `La canción debe estar entre 1 y ${LIMITS.SET_SONGS_MAX}.`);
     }
     if (room.ranked && slot >= this._quota(room, playerId)) {
-      return fail('INVALID_SLOT', `En clasificatoria te tocan ${this._quota(room, playerId)} canciones (${LIMITS.SET_SONGS_MAX} en total entre todos).`);
+      return fail('INVALID_SLOT', 'En clasificatoria cada jugador elige una sola canción.');
     }
     if (!chart || !chart.songId || !chart.durationMs || !chart.totalNotes) {
       return fail('NO_SONG', 'Canción incompleta.');
@@ -708,17 +777,11 @@ class RoomManager extends EventEmitter {
       entry.rank = tied ? prev.rank : i + 1;
     });
 
-    const changes = room.ranked
-      ? computeRatingChanges(
-          entries.map((e) => ({ id: e.playerId, rating: e.ratingBefore, rank: e.rank })),
-          this.options.ratingK
-        )
-      : new Map();
-
+    // Clasificatoria: puntos fijos por puesto según los jugadores que empezaron la partida (quien abandonó no puntúa).
+    const total = entries.length;
     for (const entry of entries) {
-      entry.ratingChange = changes.get(entry.playerId) ?? 0;
-      entry.ratingAfter = Math.max(0, entry.ratingBefore + entry.ratingChange);
-      entry.ratingChange = entry.ratingAfter - entry.ratingBefore;
+      entry.ratingChange = room.ranked && !entry.left ? pointsForRank(entry.rank, total, this.options) : 0;
+      entry.ratingAfter = entry.ratingBefore + entry.ratingChange;
       const present = room.players.get(entry.playerId);
       if (present) present.rating = entry.ratingAfter;
     }
@@ -784,6 +847,7 @@ class RoomManager extends EventEmitter {
       country: player.country ?? null,
       rating: player.rating,
       ready: false,
+      wantsStart: false, // sala de espera: quiere empezar con los jugadores que hay
       joinedAt: Date.now(),
       chart: null, // canción propia (clasificatoria, o invitado en casual por turnos)
       more: [], // canciones extra (2.ª, 3.ª, 4.ª) del jugador
@@ -828,10 +892,11 @@ class RoomManager extends EventEmitter {
       lists.push({ p, picks });
     }
     const rounds = [];
-    for (let k = 0; rounds.length < LIMITS.SET_SONGS_MAX; k += 1) {
+    const cap = this._songCap(room);
+    for (let k = 0; rounds.length < cap; k += 1) {
       let added = false;
       for (const { p, picks } of lists) {
-        if (rounds.length >= LIMITS.SET_SONGS_MAX) break;
+        if (rounds.length >= cap) break;
         if (k >= picks.length) continue;
         rounds.push({ ownerId: p.id, ownerNickname: p.nickname, slot: k, chart: picks[k] });
         added = true;
@@ -922,7 +987,7 @@ class RoomManager extends EventEmitter {
 
   /** Clasificatoria: arranca la cuenta atrás en cuanto todos han elegido canción y están listos. */
   _maybeStartRanked(room) {
-    if (!room.ranked || room.state !== ROOM_STATES.LOBBY) return;
+    if (!room.ranked || room.waiting || room.state !== ROOM_STATES.LOBBY) return;
     if (room.players.size < this.options.minPlayersToStart) return;
     for (const p of room.players.values()) {
       if (!p.chart || !p.ready) return;
@@ -932,16 +997,44 @@ class RoomManager extends EventEmitter {
     this._beginCountdown(room);
   }
 
-  /**
-   * Clasificatoria: canciones que debe elegir cada jugador para completar SET_SONGS_MAX en total.
-   * Se reparten por orden (anfitrión primero): 2 jugadores -> 2+2; 3 -> 2+1+1; 4 -> 1+1+1+1.
-   */
+  /** Clasificatoria: cada jugador elige UNA canción (con 6 jugadores se juegan 6 canciones). */
+  // eslint-disable-next-line no-unused-vars
   _quota(room, playerId) {
-    const ids = [room.hostId, ...[...room.players.keys()].filter((id) => id !== room.hostId)];
-    const n = Math.max(1, ids.length);
-    const idx = Math.max(0, ids.indexOf(playerId));
-    const total = LIMITS.SET_SONGS_MAX;
-    return Math.max(1, Math.floor(total / n) + (idx < total % n ? 1 : 0));
+    return 1;
+  }
+
+  /** Máximo de canciones de la partida: en clasificatoria, una por jugador; en casual, SET_SONGS_MAX. */
+  _songCap(room) {
+    return room.ranked ? Math.max(1, room.players.size) : LIMITS.SET_SONGS_MAX;
+  }
+
+  // ---- Sala de espera (clasificatoria online) ----
+  _openOnlineRoom() {
+    for (const room of this.rooms.values()) {
+      if (room.ranked && room.waiting && room.state === ROOM_STATES.LOBBY && room.players.size < room.maxPlayers) return room;
+    }
+    return null;
+  }
+
+  _resetVotes(room) {
+    for (const p of room.players.values()) p.wantsStart = false;
+  }
+
+  /** Empieza la selección de canciones si la sala está completa o si todos (mínimo 2) quieren empezar ya. */
+  _maybeEndWaiting(room) {
+    if (!room.waiting || room.state !== ROOM_STATES.LOBBY) return;
+    const n = room.players.size;
+    const full = n >= room.maxPlayers;
+    const allWant = n >= this.options.minPlayersToStart && [...room.players.values()].every((p) => p.wantsStart);
+    if (full || allWant) this._startPicking(room);
+  }
+
+  _startPicking(room) {
+    room.waiting = false;
+    this._resetVotes(room);
+    for (const p of room.players.values()) p.ready = false;
+    this.emit('pickStart', room);
+    this.beginRankedPick(room.code); // abre el reloj de selección y envía el estado a todos
   }
 
   _onPickTimeout(code) {
@@ -1157,5 +1250,6 @@ module.exports = {
   ROOM_STATES,
   DEFAULT_OPTIONS,
   computeRatingChanges,
+  pointsForRank,
   accuracyOf,
 };
