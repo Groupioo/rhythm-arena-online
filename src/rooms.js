@@ -926,8 +926,11 @@ class RoomManager extends EventEmitter {
   _roundEntry(room, p) {
     const chart = room.rounds[room.round].chart;
     const stats = { ...p.stats };
-    // Si quedaron notas sin juzgar (abandono, tiempo agotado, muerte en supervivencia) el combo se corta.
-    const complete = judgedCount(stats) >= chart.totalNotes;
+    // El combo solo se corta si el jugador NO terminó la canción (abandono o tiempo agotado).
+    // Antes se exigía además judgedCount >= totalNotes: si el cliente terminaba con alguna nota menos juzgada
+    // (o el nº de notas del servidor no coincidía exactamente con el chart del cliente), el combo se ponía a 0
+    // al empezar la canción siguiente aunque no se hubiera fallado ninguna nota.
+    const complete = p.finished || judgedCount(stats) >= chart.totalNotes;
     return {
       round: room.round,
       songId: chart.songId,
