@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=8">
+  <link rel="stylesheet" href="/css/style.css?v=9">
 </head>
 <body class="bgvideo">
   <!-- Vídeo de fondo: solo visible en el menú y en el lobby (selección de canciones), nunca en la partida -->
@@ -63,6 +63,7 @@
         <div class="brand">Rhythm <span>Arena</span></div>
         <button id="btn-keys" class="icon-btn" type="button" title="Configurar teclas" aria-label="Configurar teclas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></button>
         <button id="btn-skins" class="icon-btn" type="button" title="Tipo de flecha" aria-label="Tipo de flecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 12h5v8h6v-8h5z"/></svg></button>
+        <button id="btn-rank" class="icon-btn" type="button" title="Ranking mundial" aria-label="Ranking mundial" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg></button>
         <button id="btn-fs-menu" class="icon-btn" type="button" title="Pantalla completa" aria-label="Pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
         <button id="online-badge" class="online-badge" type="button" title="Ver jugadores conectados y chat"><span class="online-dot" aria-hidden="true"></span><span id="online-badge-text">0 en línea</span></button>
         <button id="btn-logout" class="icon-btn" type="button" title="Cerrar sesión" aria-label="Cerrar sesión"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></button>
@@ -279,6 +280,20 @@
       <div class="row pm-actions"><button id="pm-save" class="primary" type="button">Guardar</button><button id="pm-cancel" type="button">Cerrar</button></div>
     </div>
   </div>
+  <div id="rank-modal" class="pm-overlay" hidden>
+    <div class="pm-box rk-box" role="dialog" aria-modal="true" aria-labelledby="rk-title">
+      <button id="rk-close" class="pm-x" type="button" aria-label="Cerrar">&times;</button>
+      <h3 id="rk-title">Ranking mundial</h3>
+      <p class="muted rk-sub">Los mejores jugadores de todo el mundo en partidas clasificatorias.</p>
+      <div class="rk-tabs" role="tablist" aria-label="Tipo de ranking">
+        <button id="rk-tab-rating" class="rtab on" type="button" role="tab" aria-selected="true">Por puntos</button>
+        <button id="rk-tab-wins" class="rtab" type="button" role="tab" aria-selected="false">Por victorias</button>
+      </div>
+      <ol id="rk-list" class="rk-list" data-tab="rating" aria-live="polite"></ol>
+      <p id="rk-me" class="rk-me muted" hidden></p>
+      <div class="rk-foot"><small id="rk-msg" class="muted" role="status"></small><button id="rk-refresh" class="ghost" type="button">Actualizar</button></div>
+    </div>
+  </div>
   <div id="toast" role="status" aria-live="polite"></div>
 
   <script src="/socket.io/socket.io.js"></script>
@@ -288,7 +303,7 @@
   <script src="/js/skins.js?v=5"></script>
   <script src="/js/game.js?v=5"></script>
   <script src="/js/countries.js?v=7"></script>
-  <script src="/js/main.js?v=8"></script>
+  <script src="/js/main.js?v=9"></script>
   <script src="/js/songpicker.js"></script>
   <script src="/js/mobile.js"></script>
 </body>
