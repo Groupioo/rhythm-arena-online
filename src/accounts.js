@@ -11,7 +11,7 @@
  */
 const crypto = require('crypto');
 const { promisify } = require('util');
-const { ok, fail, validateNickname } = require('./validation');
+const { ok, fail, validateNickname, cleanText } = require('./validation');
 const { COUNTRY_SET } = require('./countries');
 
 const scrypt = promisify(crypto.scrypt);
@@ -21,7 +21,9 @@ const MAX_TOKENS = 5; // sesiones recordadas por cuenta (móvil, PC...)
 const MAX_FAILS = 5;
 const LOCK_MS = 60_000;
 const FLUSH_MS = 3_000;
-const PERSISTED = ['nickname', 'country', 'clientId', 'rating', 'games', 'salt', 'hash', 'tokens', 'createdAt'];
+const PERSISTED = ['nickname', 'country', 'clientId', 'rating', 'games', 'wins', 'losses', 'draws', 'bio', 'avatar', 'salt', 'hash', 'tokens', 'createdAt'];
+const BIO_MAX = 160;
+const AVATAR_MAX = 60_000; // caracteres del data URL (≈45 KB); el cliente lo reduce a 192x192 JPEG
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const keyOf = (nickname) => nickname.normalize('NFKC').toLowerCase();
@@ -78,6 +80,40 @@ function createAccounts({ store, initialRating, log = console }) {
     f.n += 1;
     if (f.n >= MAX_FAILS) { f.n = 0; f.until = Date.now() + LOCK_MS; }
     fails.set(k, f);
+  }
+
+  // ---- Perfil ----
+  function validateBio(raw) {
+    if (typeof raw !== 'string') return fail('INVALID_BIO', 'La biografía debe ser texto.');
+    const v = cleanText(raw);
+    if (v.length > BIO_MAX) return fail('INVALID_BIO', `La biografía no puede superar ${BIO_MAX} caracteres.`);
+    return ok(v);
+  }
+  /** null = quitar foto. Solo data URL jpeg/png/webp, con tamaño máximo y firma de archivo comprobada. */
+  function validateAvatar(raw) {
+    if (raw === null) return ok(null);
+    const m = typeof raw === 'string' && raw.length <= AVATAR_MAX ? /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(raw) : null;
+    if (!m) return fail('INVALID_AVATAR', 'La foto no es válida o es demasiado grande.');
+    const head = Buffer.from(m[2].slice(0, 24), 'base64');
+    const good = m[1] === 'jpeg' ? head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff
+      : m[1] === 'png' ? head.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+      : head.subarray(0, 4).toString('latin1') === 'RIFF' && head.subarray(8, 12).toString('latin1') === 'WEBP';
+    return good ? ok(raw) : fail('INVALID_AVATAR', 'El archivo no es una imagen válida.');
+  }
+  /** data: { bio?, avatar? }  (avatar: string = nueva foto, null = quitar, ausente = sin cambios) */
+  function updateProfile(account, data) {
+    const changes = {};
+    if (data.bio !== undefined) { const r = validateBio(data.bio); if (!r.ok) return r; changes.bio = r.value; }
+    if (data.avatar !== undefined) { const r = validateAvatar(data.avatar); if (!r.ok) return r; changes.avatar = r.value; }
+    Object.assign(account, changes);
+    save(account);
+    return ok(account);
+  }
+  /** outcome: 'win' | 'loss' | 'draw' (partida clasificatoria terminada) */
+  function recordResult(account, outcome) {
+    const k = outcome === 'win' ? 'wins' : outcome === 'draw' ? 'draws' : 'losses';
+    account[k] = (account[k] || 0) + 1;
+    save(account);
   }
 
   // ---- API ----
@@ -140,7 +176,7 @@ function createAccounts({ store, initialRating, log = console }) {
     save(account);
   }
 
-  return { register, login, resume, revoke, save, flush, getByClientId: (id) => byClientId.get(id) || null };
+  return { register, login, resume, revoke, save, flush, updateProfile, recordResult, getByClientId: (id) => byClientId.get(id) || null };
 }
 
 module.exports = { createAccounts };
