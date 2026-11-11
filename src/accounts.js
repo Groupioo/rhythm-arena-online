@@ -6,6 +6,8 @@
  *   hash del apodo en minúsculas, y `create()` garantiza que no haya dos cuentas con el mismo apodo.
  * - Tras iniciar sesión se entrega un token aleatorio (se guarda solo su hash) para reconectar sin pedir la contraseña.
  * - Freno de fuerza bruta: 5 fallos seguidos bloquean ese apodo 60 s.
+ * - Ranking mundial: leaderboard() devuelve el top por rating y por victorias (solo datos públicos). Se guarda en caché
+ *   30 s para que abrir el ranking muchas veces no gaste lecturas de la base de datos.
  * - Las cuentas usadas desde el arranque se conservan en memoria; los cambios (rating, partidas, tokens) se agrupan y se
  *   escriben cada pocos segundos para gastar pocas escrituras.
  */
@@ -22,6 +24,9 @@ const MAX_FAILS = 5;
 const LOCK_MS = 60_000;
 const FLUSH_MS = 3_000;
 const PERSISTED = ['nickname', 'country', 'clientId', 'rating', 'games', 'wins', 'losses', 'draws', 'bio', 'avatar', 'salt', 'hash', 'tokens', 'createdAt'];
+const BOARD_SIZE = 20; // jugadores que se muestran en cada ranking
+const BOARD_FETCH = 50; // se piden de más por si hay que descartar a quien aún no ha jugado
+const BOARD_TTL_MS = 30_000;
 const BIO_MAX = 160;
 const AVATAR_MAX = 60_000; // caracteres del data URL (≈45 KB); el cliente lo reduce a 192x192 JPEG
 
@@ -116,6 +121,36 @@ function createAccounts({ store, initialRating, log = console }) {
     save(account);
   }
 
+  // ---- Ranking mundial ----
+  let boardCache = null; // { at, data }
+  let boardPending = null;
+  const num = (v) => (Number.isFinite(v) ? v : 0);
+  const toEntry = (a, i) => ({
+    rank: i + 1, nickname: a.nickname, country: a.country || null, rating: num(a.rating), games: num(a.games),
+    wins: num(a.wins), losses: num(a.losses), draws: num(a.draws), avatar: a.avatar || null,
+  });
+  async function buildBoard() {
+    await flush(); // que los resultados recién jugados (aún sin guardar) cuenten
+    const [byRating, byWins] = await Promise.all([store.top('rating', BOARD_FETCH), store.top('wins', BOARD_FETCH)]);
+    return {
+      rating: byRating.filter((a) => num(a.games) > 0)
+        .sort((a, b) => num(b.rating) - num(a.rating) || num(b.wins) - num(a.wins)).slice(0, BOARD_SIZE).map(toEntry),
+      wins: byWins.filter((a) => num(a.wins) > 0)
+        .sort((a, b) => num(b.wins) - num(a.wins) || num(b.rating) - num(a.rating)).slice(0, BOARD_SIZE).map(toEntry),
+      size: BOARD_SIZE,
+      updatedAt: Date.now(),
+    };
+  }
+  function leaderboard() {
+    if (boardCache && Date.now() - boardCache.at < BOARD_TTL_MS) return Promise.resolve(boardCache.data);
+    if (!boardPending) {
+      boardPending = buildBoard()
+        .then((data) => { boardCache = { at: Date.now(), data }; return data; })
+        .finally(() => { boardPending = null; });
+    }
+    return boardPending;
+  }
+
   // ---- API ----
   async function register({ nickname, password, password2, country }) {
     const nick = validateNickname(nickname);
@@ -176,7 +211,7 @@ function createAccounts({ store, initialRating, log = console }) {
     save(account);
   }
 
-  return { register, login, resume, revoke, save, flush, updateProfile, recordResult, getByClientId: (id) => byClientId.get(id) || null };
+  return { register, login, resume, revoke, save, flush, updateProfile, recordResult, leaderboard, getByClientId: (id) => byClientId.get(id) || null };
 }
 
 module.exports = { createAccounts };

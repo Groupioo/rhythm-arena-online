@@ -4,6 +4,8 @@
  *  - Firestore (producción): si existe la variable FIREBASE_SERVICE_ACCOUNT. Solo el servidor accede (firebase-admin),
  *    así que las reglas de Firestore pueden estar en "denegar todo" y nadie puede leer los hashes desde el navegador.
  *  - Archivo JSON (solo desarrollo local): si no hay credenciales. En Render se borra en cada despliegue.
+ * Además: top(campo, n) -> las n cuentas con mayor valor en ese campo (ranking mundial). Solo devuelve campos públicos:
+ * nunca salt, hash ni tokens.
  */
 const fs = require('fs');
 const path = require('path');
@@ -14,6 +16,9 @@ function parseCredentials(raw) {
   if (typeof cred.private_key === 'string') cred.private_key = cred.private_key.replace(/\\n/g, '\n');
   return cred;
 }
+
+const PUBLIC_FIELDS = ['nickname', 'country', 'rating', 'games', 'wins', 'losses', 'draws', 'avatar'];
+const publicOnly = (a) => Object.fromEntries(PUBLIC_FIELDS.filter((k) => a[k] !== undefined).map((k) => [k, a[k]]));
 
 function createFirestoreStore(raw) {
   const admin = require('firebase-admin'); // se carga solo si se usa
@@ -27,6 +32,11 @@ function createFirestoreStore(raw) {
       catch (e) { if (e.code === 6 || /ALREADY_EXISTS/.test(String(e.message))) return false; throw e; }
     },
     async update(id, data) { await col.doc(id).set(data, { merge: true }); },
+    // Índice de un solo campo (automático en Firestore): no hace falta crear índices compuestos.
+    async top(field, limit) {
+      const snap = await col.orderBy(field, 'desc').limit(limit).select(...PUBLIC_FIELDS).get();
+      return snap.docs.map((d) => d.data());
+    },
   };
 }
 
@@ -43,6 +53,13 @@ function createFileStore(file) {
     async get(id) { return db[id] ? { ...db[id] } : null; },
     async create(id, data) { if (db[id]) return false; db[id] = { ...data }; persist(); return true; },
     async update(id, data) { db[id] = { ...(db[id] || {}), ...data }; persist(); },
+    async top(field, limit) {
+      return Object.values(db)
+        .filter((a) => typeof a[field] === 'number')
+        .sort((a, b) => b[field] - a[field])
+        .slice(0, limit)
+        .map(publicOnly);
+    },
   };
 }
 
