@@ -815,3 +815,25 @@ body.playing,body.playing .game-wrap,canvas#stage{touch-action:none;-ms-touch-ac
 .country-item .flag{margin-right:0;flex:none}
 .country-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
+/* ---------- Perfil (modal) ---------- */
+.profile[role=button]{cursor:pointer}
+.profile[role=button]:hover{border-color:var(--cyan)}
+.avatar{background-size:cover;background-position:center;flex:none}
+.pm-overlay{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:16px;background:rgba(5,6,18,.78)}
+.pm-overlay[hidden]{display:none}
+.pm-box{position:relative;width:min(460px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:22px;border-radius:18px;background:var(--panel-solid);border:1px solid var(--line);box-shadow:0 24px 70px rgba(0,0,0,.6)}
+.pm-x{position:absolute;top:10px;right:10px;width:36px;height:36px;padding:0;font-size:1.4rem;line-height:1;border-radius:10px;background:transparent;border-color:transparent;color:var(--muted)}
+.pm-head{display:flex;gap:16px;align-items:center;margin-bottom:16px;padding-right:28px}
+.pm-avatar{width:88px;height:88px;font-size:2.2rem;border:2px solid var(--line)}
+.pm-id{min-width:0}.pm-id h3{margin:0 0 2px;font-size:1.3rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pm-photo{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}.pm-photo button{padding:7px 12px;font-size:.85rem}
+.pm-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pm-stat{text-align:center;padding:12px 6px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--line)}
+.pm-stat strong{display:block;font-size:1.6rem;line-height:1.1}.pm-stat span{font-size:.78rem;color:var(--muted)}
+.pm-stat.win strong{color:#7dff4f}.pm-stat.loss strong{color:#ff7b8a}.pm-stat.draw strong{color:#ffe14f}
+.pm-note{margin:8px 0 0;font-size:.78rem}
+.pm-box textarea{width:100%;resize:vertical;min-height:72px;font:inherit;color:var(--text);background:rgba(7,8,24,.75);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+.pm-box textarea:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 3px rgba(79,216,255,.18)}
+.pm-foot{display:flex;justify-content:space-between;gap:10px;margin-top:4px;min-height:1.2em}.pm-msg{color:#ff7b8a;text-align:right}
+.pm-actions{justify-content:flex-end;margin-top:12px}
+
