@@ -120,18 +120,109 @@
     renderMe();
     return p;
   }
-  const authCall = (event, payload) => net.req(event, payload).then(startSession);
+  // Espera hasta 20 s (la primera consulta a la base de datos tras un rato de inactividad puede tardar)
+  const authCall = (event, payload) => new Promise((resolve, reject) => {
+    net.socket.timeout(20000).emit(event, payload, (err, res) => {
+      if (err) return reject(new Error('El servidor tarda en responder. Espera unos segundos y vuelve a intentarlo.'));
+      if (!res || !res.ok) return reject(new Error(res && res.error ? res.error.message : 'Error desconocido.'));
+      return resolve(startSession(res.data));
+    });
+  });
   const resumeSession = () => authCall('auth:resume', { nickname: (S.me && S.me.nickname) || ls.get('ra_nick'), token: ls.get('ra_token') });
+  // Foto de perfil, o la inicial del apodo sobre un degradado si no hay foto
+  function paintAvatar(elm, me) {
+    if (me.avatar) {
+      elm.textContent = '';
+      elm.style.background = `center / cover no-repeat url("${me.avatar}")`;
+      return;
+    }
+    const n = me.nickname || '?';
+    let h = 0; for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) % 360;
+    elm.textContent = n.trim().charAt(0).toUpperCase();
+    elm.style.background = `linear-gradient(135deg, hsl(${h},90%,62%), hsl(${(h + 60) % 360},90%,60%))`;
+  }
   function renderMe() {
     const n = S.me.nickname || '?';
-    let h = 0; for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) % 360;
-    const av = $('me-avatar');
-    av.textContent = n.trim().charAt(0).toUpperCase();
-    av.style.background = `linear-gradient(135deg, hsl(${h},90%,62%), hsl(${(h + 60) % 360},90%,60%))`;
+    paintAvatar($('me-avatar'), S.me);
     $('me-name').replaceChildren(...[window.RA.flag(S.me.country), document.createTextNode(n)].filter(Boolean));
     $('me-meta').textContent = `${S.me.games} ${S.me.games === 1 ? 'partida' : 'partidas'}`;
     $('me-rating').textContent = `${S.me.rating} pts`;
   }
+
+  // ---------- Perfil (modal): estadísticas, foto y biografía ----------
+  const pm = { avatar: undefined }; // undefined = sin cambios, null = quitar foto, string = foto nueva
+  const pmBox = () => $('profile-modal');
+  function pmCount() { $('pm-count').textContent = `${$('pm-bio').value.length}/160`; }
+  function pmPaint() {
+    const me = S.me;
+    const view = { ...me, avatar: pm.avatar === undefined ? me.avatar : pm.avatar };
+    paintAvatar($('pm-avatar'), view);
+    $('pm-remove').hidden = !view.avatar;
+  }
+  function openProfile() {
+    if (!S.me) return;
+    const me = S.me, w = me.wins || 0, l = me.losses || 0, d = me.draws || 0, t = w + l + d;
+    pm.avatar = undefined;
+    $('pm-title').replaceChildren(...[window.RA.flag(me.country), document.createTextNode(me.nickname)].filter(Boolean));
+    $('pm-meta').textContent = `${me.rating} pts · ${t ? Math.round((w * 100) / t) : 0}% de victorias`;
+    $('pm-wins').textContent = w; $('pm-losses').textContent = l; $('pm-draws').textContent = d;
+    $('pm-bio').value = me.bio || ''; pmCount();
+    $('pm-msg').textContent = '';
+    pmPaint();
+    pmBox().hidden = false;
+    $('pm-change').focus();
+  }
+  function closeProfile() { pmBox().hidden = true; $('me').focus(); }
+  function fileToAvatar(file) {
+    return new Promise((resolve, reject) => {
+      if (!file || !file.type.startsWith('image/')) return reject(new Error('Elige un archivo de imagen.'));
+      if (file.size > 10 * 1024 * 1024) return reject(new Error('La imagen pesa más de 10 MB.'));
+      const fr = new FileReader();
+      fr.onerror = () => reject(new Error('No se pudo leer la imagen.'));
+      fr.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('No se pudo leer la imagen.'));
+        img.onload = () => {
+          // Recorte cuadrado centrado y reducción a 192x192: ocupa muy poco en la base de datos
+          const size = 192, side = Math.min(img.naturalWidth, img.naturalHeight);
+          const c = document.createElement('canvas'); c.width = c.height = size;
+          c.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, size, size);
+          for (const q of [0.85, 0.7, 0.55, 0.4]) {
+            const url = c.toDataURL('image/jpeg', q);
+            if (url.length <= 55000) return resolve(url);
+          }
+          return reject(new Error('La imagen es demasiado compleja. Prueba con otra.'));
+        };
+        img.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    });
+  }
+  $('me').addEventListener('click', openProfile);
+  $('me').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openProfile(); } });
+  $('pm-close').addEventListener('click', closeProfile);
+  $('pm-cancel').addEventListener('click', closeProfile);
+  pmBox().addEventListener('pointerdown', (e) => { if (e.target === pmBox()) closeProfile(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pmBox().hidden) closeProfile(); });
+  $('pm-bio').addEventListener('input', pmCount);
+  $('pm-change').addEventListener('click', () => $('pm-file').click());
+  $('pm-remove').addEventListener('click', () => { pm.avatar = null; pmPaint(); });
+  $('pm-file').addEventListener('change', async () => {
+    const f = $('pm-file').files[0]; $('pm-file').value = '';
+    if (!f) return;
+    try { pm.avatar = await fileToAvatar(f); $('pm-msg').textContent = ''; pmPaint(); }
+    catch (err) { $('pm-msg').textContent = err.message; }
+  });
+  $('pm-save').addEventListener('click', async () => {
+    const btn = $('pm-save'); btn.disabled = true; $('pm-msg').textContent = '';
+    try {
+      const payload = { bio: $('pm-bio').value };
+      if (pm.avatar !== undefined) payload.avatar = pm.avatar;
+      S.me = await net.req('profile:save', payload);
+      renderMe(); closeProfile(); toast('Perfil guardado.');
+    } catch (err) { $('pm-msg').textContent = err.message; }
+    btn.disabled = false;
+  });
 
   show('login'); // vídeo y música desde la pantalla de inicio
   $('nick').value = ls.get('ra_nick') || '';
