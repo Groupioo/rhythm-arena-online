@@ -865,3 +865,14 @@ body.playing,body.playing .game-wrap,canvas#stage{touch-action:none;-ms-touch-ac
 .rk-me{margin:10px 0 0;font-size:.85rem;text-align:center}
 .rk-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px}
 @media(max-width:560px){.rk-row{gap:9px;padding-right:9px}.rk-av{width:34px;height:34px}.rk-val strong{font-size:.95rem}}
+
+/* ---------- Clasificatoria online: sala de espera ---------- */
+.wait-card{text-align:center}
+.wait-card h3{margin:0 0 12px;font-size:1.15rem}
+.wait-dots{display:flex;justify-content:center;gap:10px;margin:0 0 12px}
+.wait-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--line);background:rgba(255,255,255,.04);transition:background .2s,box-shadow .2s,border-color .2s}
+.wait-dot.on{background:var(--lime);border-color:var(--lime);box-shadow:0 0 12px var(--lime)}
+.wait-card p{margin:0 0 14px;font-size:.88rem;line-height:1.45}
+.wait-card button{width:100%}
+.wait-prizes{margin:0 0 10px;font-weight:800;font-size:.95rem;color:var(--cyan)}
+.wait-prizes:empty{display:none}
