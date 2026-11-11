@@ -224,6 +224,85 @@
     btn.disabled = false;
   });
 
+  // ---------- Ranking mundial (modal): mejores jugadores por puntos y por victorias ----------
+  const rk = { tab: 'rating', data: null, loading: false };
+  const rkBox = () => $('rank-modal');
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  // El ranking puede tardar si la base de datos estaba dormida: se espera hasta 20 s
+  const rkFetch = () => new Promise((resolve, reject) => {
+    net.socket.timeout(20000).emit('leaderboard:get', {}, (err, res) => {
+      if (err) return reject(new Error('El servidor tarda en responder. Inténtalo de nuevo.'));
+      if (!res || !res.ok) return reject(new Error(res && res.error ? res.error.message : 'No se pudo cargar el ranking.'));
+      return resolve(res.data);
+    });
+  });
+  function rkRender() {
+    const list = $('rk-list');
+    list.dataset.tab = rk.tab;
+    list.replaceChildren();
+    const rows = rk.data ? rk.data[rk.tab] : [];
+    if (!rows.length) {
+      list.appendChild(el('li', 'rk-empty', rk.data ? 'Aún no hay jugadores en este ranking. ¡Juega una clasificatoria!' : 'Cargando…'));
+    }
+    let meIn = false;
+    for (const p of rows) {
+      const mine = !!(S.me && p.nickname === S.me.nickname);
+      if (mine) meIn = true;
+      const li = el('li', `rk-row${mine ? ' me' : ''}${p.rank <= 3 ? ` top${p.rank}` : ''}`);
+      const av = el('div', 'avatar rk-av'); av.setAttribute('aria-hidden', 'true'); paintAvatar(av, p);
+      const who = el('div', 'rk-who');
+      const name = nameEl(p.nickname, p.country); name.className = 'rk-name';
+      const total = p.wins + p.losses + p.draws;
+      who.append(name, el('span', 'rk-meta', `${plural(p.games, 'partida', 'partidas')} · ${total ? Math.round((p.wins * 100) / total) : 0}% de victorias`));
+      const val = el('div', 'rk-val');
+      const pts = `${p.rating} pts`, wins = plural(p.wins, 'victoria', 'victorias');
+      val.append(el('strong', '', rk.tab === 'wins' ? wins : pts), el('span', '', rk.tab === 'wins' ? pts : wins));
+      li.append(el('span', 'rk-pos', String(p.rank)), av, who, val);
+      list.appendChild(li);
+    }
+    // Si no estás en el top, se muestra tu marca para que sepas cuánto te falta
+    const note = $('rk-me');
+    if (rk.data && S.me && !meIn) {
+      const w = S.me.wins || 0;
+      note.textContent = `Tú: ${S.me.rating} pts · ${plural(w, 'victoria', 'victorias')}. Gana partidas clasificatorias para entrar en el top ${rk.data.size || 20}.`;
+      note.hidden = false;
+    } else note.hidden = true;
+  }
+  function rkSetTab(tab) {
+    rk.tab = tab;
+    for (const t of ['rating', 'wins']) {
+      const b = $(`rk-tab-${t}`);
+      b.classList.toggle('on', t === tab);
+      b.setAttribute('aria-selected', String(t === tab));
+    }
+    rkRender();
+  }
+  async function rkLoad() {
+    if (rk.loading) return;
+    rk.loading = true; $('rk-refresh').disabled = true; $('rk-msg').textContent = 'Cargando…';
+    try {
+      rk.data = await rkFetch();
+      $('rk-msg').textContent = `Actualizado ${new Date(rk.data.updatedAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}`;
+    } catch (err) { $('rk-msg').textContent = err.message; }
+    rk.loading = false; $('rk-refresh').disabled = false;
+    if (!rkBox().hidden) rkRender();
+  }
+  function openRanking() {
+    if (!S.me) return;
+    rkRender(); // si ya se había abierto antes, se ve al instante y se refresca detrás
+    rkBox().hidden = false;
+    $('rk-close').focus();
+    rkLoad();
+  }
+  function closeRanking() { rkBox().hidden = true; $('btn-rank').focus(); }
+  $('btn-rank').addEventListener('click', openRanking);
+  $('rk-close').addEventListener('click', closeRanking);
+  $('rk-refresh').addEventListener('click', rkLoad);
+  $('rk-tab-rating').addEventListener('click', () => rkSetTab('rating'));
+  $('rk-tab-wins').addEventListener('click', () => rkSetTab('wins'));
+  rkBox().addEventListener('pointerdown', (e) => { if (e.target === rkBox()) closeRanking(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !rkBox().hidden) closeRanking(); });
+
   show('login'); // vídeo y música desde la pantalla de inicio
   $('nick').value = ls.get('ra_nick') || '';
   let authMode = 'login';
