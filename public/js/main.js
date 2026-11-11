@@ -1072,7 +1072,8 @@
   net.socket.on('game:countdown', async (d) => {
     // Casual por turnos: el servidor manda la canción de la ronda; en clasificatoria cada uno usa la suya.
     const settings = d.chart ? { ...S.room.settings, ...d.chart } : S.room.settings;
-    if (!d.round || d.round === 1) { S.sumStats = null; S.roundSpeeds = []; }
+    if (!d.round || d.round === 1) { S.sumStats = null; S.roundSpeeds = []; gameChatReset(); }
+    $('gamechat').hidden = !(S.room && S.room.ranked); // el chat de partida solo existe en clasificatoria
     // Mi velocidad en esta canción, la que puse en el lobby: la manda el servidor (respaldo: el plan guardado o la general).
     const planRound = S.roundPlan && S.roundPlan[(d.round || 1) - 1];
     const mine = planRound && (planRound.speeds || []).find((z) => z.id === net.socket.id);
@@ -1125,6 +1126,57 @@
     const nextSong = next ? allSongs.find((s) => s.songId === next.songId) : null;
     if (nextSong && nextSong.lib) { try { songs.prefetch(nextSong, next.difficulty); } catch (e) { /* solo es una optimización */ } }
   });
+  // ---------- Chat de la partida (clasificatoria) ----------
+  // El servidor reenvía 'chat:message' a toda la sala. Los mensajes antiguos se desvanecen solos; al abrir el chat se ven todos.
+  const gcBox = $('gamechat'), gcLog = $('gamechat-log'), gcForm = $('gamechat-form'), gcInput = $('gamechat-input'), gcToggle = $('gamechat-toggle');
+  function gameChatOpen(open) {
+    gcForm.hidden = !open;
+    gcBox.classList.toggle('open', open);
+    gcToggle.setAttribute('aria-expanded', String(open));
+    if (open) {
+      gcToggle.classList.remove('unread');
+      gcLog.scrollTop = gcLog.scrollHeight;
+      gcInput.focus();
+    } else gcInput.blur();
+  }
+  function gameChatReset() {
+    gcLog.replaceChildren();
+    gcInput.value = '';
+    gcToggle.classList.remove('unread');
+    gameChatOpen(false);
+  }
+  function gameChatAdd(m) {
+    if (!m || typeof m.text !== 'string' || typeof m.nickname !== 'string') return;
+    const mine = S.me && m.nickname === S.me.nickname;
+    const row = el('div', mine ? 'gc-msg me' : 'gc-msg');
+    const nick = el('span', 'nick', m.nickname.slice(0, 16));
+    { const f = window.RA.flag(m.country); if (f) nick.prepend(f); }
+    nick.style.color = mine ? '' : `hsl(${hueOf(m.nickname)},90%,70%)`;
+    row.append(nick, document.createTextNode(m.text.slice(0, 200)));
+    gcLog.appendChild(row);
+    while (gcLog.children.length > 50) gcLog.removeChild(gcLog.firstChild);
+    gcLog.scrollTop = gcLog.scrollHeight;
+    setTimeout(() => row.classList.add('old'), 8000);
+    if (!mine && gcForm.hidden) gcToggle.classList.add('unread');
+  }
+  net.socket.on('chat:message', (m) => { if (S.room && S.room.ranked) gameChatAdd(m); });
+  gcToggle.addEventListener('click', () => gameChatOpen(gcForm.hidden));
+  // Las teclas escritas en el chat no deben llegar al juego (D F J K...) ni a ningún atajo de la página.
+  for (const ev of ['keydown', 'keyup', 'keypress']) {
+    gcInput.addEventListener(ev, (e) => {
+      e.stopPropagation();
+      if (ev === 'keydown' && e.key === 'Escape') gameChatOpen(false);
+    });
+  }
+  gcForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = gcInput.value.trim();
+    if (!text) return;
+    gcInput.value = '';
+    try { await net.req('chat:message', { text }); }
+    catch (err) { gcInput.value = text; toast(err.message); }
+  });
+
   net.socket.on('game:scoreboard', (d) => {
     const ol = $('scoreboard');
     ol.replaceChildren();
