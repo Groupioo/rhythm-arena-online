@@ -22,6 +22,7 @@
  *   room:mode          { mode }                             modo de juego de toda la sala casual (solo anfitrión)
  *   room:start                                              (solo anfitrión)
  *   room:rematch                                            (solo anfitrión)
+ *   leaderboard:get                                         -> { rating: [...], wins: [...], size, updatedAt }  (ranking mundial)
  *   game:score         { score, combo, maxCombo, perfect, great, good, miss }
  *   game:finish        { ...igual que game:score } (opcional)
  *   chat:message       { text }
@@ -196,6 +197,7 @@ const generalLimiter = createRateLimiter({ capacity: config.rateBurst, refillPer
 const gameLimiter = createRateLimiter({ capacity: config.gameRatePerSec * 2, refillPerSec: config.gameRatePerSec });
 const chatLimiter = createRateLimiter({ capacity: 5, refillPerSec: 1 });
 const profileLimiter = createRateLimiter({ capacity: 4, refillPerSec: 0.05 }); // guardar perfil/foto: pocas veces por minuto
+const leaderboardLimiter = createRateLimiter({ capacity: 5, refillPerSec: 0.2 }); // ranking mundial: se sirve de caché, pero se limita igual
 
 /**
  * Cuentas con contraseña (ver src/accounts.js). La cuenta es el perfil: guarda apodo, nacionalidad, rating y partidas.
@@ -608,6 +610,14 @@ function registerHandlers(socket) {
     if (!r.ok) return reply(r);
     return reply(done(publicProfile(socket.data.session.profile)));
   }, { limiter: profileLimiter });
+
+  // --- Ranking mundial (top por puntos y por victorias; solo datos públicos) ---
+  on(socket, 'leaderboard:get', (payload, reply) => {
+    accounts.leaderboard().then(
+      (data) => reply(done(data)),
+      (err) => { log.error('Error al cargar el ranking:', err); reply(fail('INTERNAL_ERROR', 'No se pudo cargar el ranking.')); }
+    );
+  }, { limiter: leaderboardLimiter });
 
   // --- Salas ---
   on(socket, 'rooms:list', (payload, reply) => reply(done({ rooms: rooms.listPublicRooms() })));
