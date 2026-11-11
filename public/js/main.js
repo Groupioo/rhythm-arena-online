@@ -896,7 +896,7 @@
     const r = S.room;
     const me = r.players.find((p) => p.id === net.socket.id);
     if (S.lobbyCode !== r.code) {
-      S.lobbyCode = r.code; S.slot = 0; // sala nueva: se empieza editando la canción 1
+      S.lobbyCode = r.code; S.slot = 0; lobbyChatReset(); // sala nueva: se empieza editando la canción 1
       net.req('room:speed', { base: S.speed }).catch(() => {}); // tu velocidad general, visible para el resto
     }
     const picks = (me && me.picks) || [];
@@ -939,6 +939,7 @@
 
     // Casual: solo el anfitrión elige la canción. Clasificatoria: cada jugador elige la SUYA.
     // Casual por turnos: todos eligen SU canción; se juega primero la del anfitrión y luego la de cada jugador.
+    $('lobby-chat').hidden = !r.ranked;
     $('host-controls').hidden = (!r.ranked && !isHost()) || waiting; // casual: los invitados no ven el selector de canciones
     $('btn-start').hidden = r.ranked || !isHost(); // la clasificatoria arranca sola cuando todos están listos
     $('host-controls-hint').hidden = false;
@@ -1025,10 +1026,10 @@
   // Chat global: mensajes del servidor ('globalchat:history' al entrar, 'globalchat:message' en vivo)
   const gLog = $('gchat-log');
   function gchatEmpty() { gLog.replaceChildren(el('div', 'empty', 'Aún no hay mensajes. ¡Escribe el primero!')); }
-  function gchatAdd(m) {
+  function gchatAdd(m, log = log) {
     if (!m || typeof m.text !== 'string' || typeof m.nickname !== 'string') return;
-    if (gLog.querySelector('.empty')) gLog.replaceChildren();
-    const nearBottom = gLog.scrollHeight - gLog.scrollTop - gLog.clientHeight < 60;
+    if (log.querySelector('.empty')) log.replaceChildren();
+    const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
     const mine = S.me && m.nickname === S.me.nickname;
     const row = el('div', mine ? 'gchat-msg me' : 'gchat-msg');
     const nick = el('span', 'nick', m.nickname.slice(0, 16));
@@ -1037,9 +1038,9 @@
     const d = new Date(Number(m.at) || Date.now());
     const time = el('span', 'time', `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
     row.append(nick, document.createTextNode(m.text.slice(0, 200)), time);
-    gLog.appendChild(row);
-    while (gLog.children.length > 100) gLog.removeChild(gLog.firstChild);
-    if (nearBottom || mine) gLog.scrollTop = gLog.scrollHeight;
+    log.appendChild(row);
+    while (log.children.length > 100) log.removeChild(log.firstChild);
+    if (nearBottom || mine) log.scrollTop = log.scrollHeight;
   }
   gchatEmpty();
 
@@ -1085,7 +1086,7 @@
   net.socket.on('game:countdown', async (d) => {
     // Casual por turnos: el servidor manda la canción de la ronda; en clasificatoria cada uno usa la suya.
     const settings = d.chart ? { ...S.room.settings, ...d.chart } : S.room.settings;
-    if (!d.round || d.round === 1) { S.sumStats = null; S.roundSpeeds = []; gameChatReset(); }
+    if (!d.round || d.round === 1) { S.sumStats = null; S.roundSpeeds = []; gameChatOpen(false); }
     $('gamechat').hidden = !(S.room && S.room.ranked); // el chat de partida solo existe en clasificatoria
     // Mi velocidad en esta canción, la que puse en el lobby: la manda el servidor (respaldo: el plan guardado o la general).
     const planRound = S.roundPlan && S.roundPlan[(d.round || 1) - 1];
@@ -1172,7 +1173,25 @@
     setTimeout(() => row.classList.add('old'), 8000);
     if (!mine && gcForm.hidden) gcToggle.classList.add('unread');
   }
-  net.socket.on('chat:message', (m) => { if (S.room && S.room.ranked) gameChatAdd(m); });
+  net.socket.on('chat:message', (m) => {
+    if (!S.room || !S.room.ranked) return;
+    gameChatAdd(m);
+    gchatAdd(m, $('lobby-chat-log'));
+  });
+  // Chat del lobby de la clasificatoria (mismo canal que el de la partida)
+  function lobbyChatReset() {
+    const log = $('lobby-chat-log');
+    log.replaceChildren(el('div', 'empty', 'Escribe para saludar a tus rivales.'));
+    gcLog.replaceChildren();
+  }
+  $('lobby-chat-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = $('lobby-chat-input'), text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    try { await net.req('chat:message', { text }); }
+    catch (err) { input.value = text; toast(err.message); }
+  });
   gcToggle.addEventListener('click', () => gameChatOpen(gcForm.hidden));
   // Las teclas escritas en el chat no deben llegar al juego (D F J K...) ni a ningún atajo de la página.
   for (const ev of ['keydown', 'keyup', 'keypress']) {
