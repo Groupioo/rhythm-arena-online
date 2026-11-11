@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=7">
+  <link rel="stylesheet" href="/css/style.css?v=8">
 </head>
 <body class="bgvideo">
   <!-- Vídeo de fondo: solo visible en el menú y en el lobby (selección de canciones), nunca en la partida -->
@@ -66,7 +66,7 @@
         <button id="btn-fs-menu" class="icon-btn" type="button" title="Pantalla completa" aria-label="Pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
         <button id="online-badge" class="online-badge" type="button" title="Ver jugadores conectados y chat"><span class="online-dot" aria-hidden="true"></span><span id="online-badge-text">0 en línea</span></button>
         <button id="btn-logout" class="icon-btn" type="button" title="Cerrar sesión" aria-label="Cerrar sesión"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></button>
-        <div id="me" class="profile">
+        <div id="me" class="profile" role="button" tabindex="0" title="Ver mi perfil" aria-haspopup="dialog">
           <div id="me-avatar" class="avatar" aria-hidden="true"></div>
           <div class="profile-text"><strong id="me-name"></strong><span id="me-meta" class="muted"></span></div>
           <span id="me-rating" class="rating-chip" title="Tu rating"></span>
@@ -252,6 +252,33 @@
       </div>
     </section>
   </main>
+  <div id="profile-modal" class="pm-overlay" hidden>
+    <div class="pm-box" role="dialog" aria-modal="true" aria-labelledby="pm-title">
+      <button id="pm-close" class="pm-x" type="button" aria-label="Cerrar">&times;</button>
+      <div class="pm-head">
+        <div id="pm-avatar" class="avatar pm-avatar" aria-hidden="true"></div>
+        <div class="pm-id">
+          <h3 id="pm-title"></h3>
+          <span id="pm-meta" class="muted"></span>
+          <div class="pm-photo">
+            <button id="pm-change" type="button">Cambiar foto</button>
+            <button id="pm-remove" class="ghost" type="button" hidden>Quitar</button>
+            <input id="pm-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+          </div>
+        </div>
+      </div>
+      <div class="pm-stats">
+        <div class="pm-stat win"><strong id="pm-wins">0</strong><span>Victorias</span></div>
+        <div class="pm-stat loss"><strong id="pm-losses">0</strong><span>Derrotas</span></div>
+        <div class="pm-stat draw"><strong id="pm-draws">0</strong><span>Empates</span></div>
+      </div>
+      <p class="pm-note muted">Estadísticas de partidas clasificatorias.</p>
+      <label for="pm-bio">Biografía</label>
+      <textarea id="pm-bio" maxlength="160" rows="3" placeholder="Cuéntanos algo sobre ti…"></textarea>
+      <div class="pm-foot"><small id="pm-count" class="muted">0/160</small><small id="pm-msg" class="pm-msg" role="status"></small></div>
+      <div class="row pm-actions"><button id="pm-save" class="primary" type="button">Guardar</button><button id="pm-cancel" type="button">Cerrar</button></div>
+    </div>
+  </div>
   <div id="toast" role="status" aria-live="polite"></div>
 
   <script src="/socket.io/socket.io.js"></script>
@@ -261,7 +288,7 @@
   <script src="/js/skins.js?v=5"></script>
   <script src="/js/game.js?v=5"></script>
   <script src="/js/countries.js?v=7"></script>
-  <script src="/js/main.js?v=7"></script>
+  <script src="/js/main.js?v=8"></script>
   <script src="/js/songpicker.js"></script>
   <script src="/js/mobile.js"></script>
 </body>
