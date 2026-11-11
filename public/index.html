@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=13">
+  <link rel="stylesheet" href="/css/style.css?v=14">
 </head>
 <body class="bgvideo">
   <!-- Vídeo de fondo: solo visible en el menú y en el lobby (selección de canciones), nunca en la partida -->
@@ -164,6 +164,14 @@
         <button id="btn-wait-start" class="primary" type="button">Empezar</button>
       </div>
       <ul id="players" class="list card"></ul>
+      <div id="lobby-chat" class="card lobby-chat" hidden>
+        <h3>Chat de la partida</h3>
+        <div id="lobby-chat-log" class="gchat-log" role="log" aria-live="polite" aria-label="Chat de la sala"></div>
+        <form id="lobby-chat-form" class="gchat-form" autocomplete="off">
+          <input id="lobby-chat-input" maxlength="200" placeholder="Escribe un mensaje…" aria-label="Mensaje">
+          <button class="primary" type="submit">Enviar</button>
+        </form>
+      </div>
       <div id="plan-card" class="card" hidden>
         <h3>Orden de canciones</h3>
         <ol id="plan-list" class="plan-list"></ol>
@@ -318,7 +326,7 @@
   <script src="/js/skins.js?v=5"></script>
   <script src="/js/game.js?v=5"></script>
   <script src="/js/countries.js?v=7"></script>
-  <script src="/js/main.js?v=13"></script>
+  <script src="/js/main.js?v=14"></script>
   <script src="/js/songpicker.js"></script>
   <script src="/js/mobile.js"></script>
 </body>
