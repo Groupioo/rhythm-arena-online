@@ -195,6 +195,7 @@ const matchmaker = new Matchmaker(config.matchmaking);
 const generalLimiter = createRateLimiter({ capacity: config.rateBurst, refillPerSec: config.ratePerSec });
 const gameLimiter = createRateLimiter({ capacity: config.gameRatePerSec * 2, refillPerSec: config.gameRatePerSec });
 const chatLimiter = createRateLimiter({ capacity: 5, refillPerSec: 1 });
+const profileLimiter = createRateLimiter({ capacity: 4, refillPerSec: 0.05 }); // guardar perfil/foto: pocas veces por minuto
 
 /**
  * Cuentas con contraseña (ver src/accounts.js). La cuenta es el perfil: guarda apodo, nacionalidad, rating y partidas.
@@ -213,7 +214,10 @@ const flushAndExit = () => { accounts.flush().finally(() => process.exit(0)); };
 process.on('SIGTERM', flushAndExit);
 process.on('SIGINT', flushAndExit);
 
-const publicProfile = (p) => ({ clientId: p.clientId, nickname: p.nickname, country: p.country || null, rating: p.rating, games: p.games });
+const publicProfile = (p) => ({
+  clientId: p.clientId, nickname: p.nickname, country: p.country || null, rating: p.rating, games: p.games,
+  wins: p.wins || 0, losses: p.losses || 0, draws: p.draws || 0, bio: p.bio || '', avatar: p.avatar || null,
+});
 
 const ipConnections = new Map();
 
@@ -394,13 +398,14 @@ rooms.on('scoreboard', (room) => {
 
 rooms.on('finished', ({ room, results, reason }) => {
   if (room.ranked) {
+    const tops = results.filter((e) => e.rank === 1).length; // varios con rank 1 = empate
     for (const entry of results) {
       const socket = io.sockets.sockets.get(entry.playerId);
       const profile = socket?.data.session?.profile ?? (entry.clientId ? accounts.getByClientId(entry.clientId) : null);
       if (!profile) continue;
       profile.rating = entry.ratingAfter;
       profile.games += 1;
-      accounts.save(profile);
+      accounts.recordResult(profile, entry.rank === 1 ? (tops > 1 ? 'draw' : 'win') : 'loss');
       if (socket) socket.emit('profile:update', publicProfile(profile));
     }
   }
@@ -596,6 +601,13 @@ function registerHandlers(socket) {
     accounts.revoke(profile, token);
     return reply(done({}));
   });
+
+  // --- Perfil: biografía y foto ---
+  on(socket, 'profile:save', (payload, reply) => {
+    const r = accounts.updateProfile(socket.data.session.profile, isPlainObject(payload) ? payload : {});
+    if (!r.ok) return reply(r);
+    return reply(done(publicProfile(socket.data.session.profile)));
+  }, { limiter: profileLimiter });
 
   // --- Salas ---
   on(socket, 'rooms:list', (payload, reply) => reply(done({ rooms: rooms.listPublicRooms() })));
